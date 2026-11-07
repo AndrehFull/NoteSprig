@@ -1,0 +1,11 @@
+{
+  "nodes": [
+    {"id":"inicio","type":"file","file":"notes/Inicio.md","x":0,"y":0,"width":300,"height":180},
+    {"id":"conceito","type":"file","file":"notes/Conceitos/Conhecimento.md","x":420,"y":0,"width":300,"height":180},
+    {"id":"pergunta","type":"text","text":"Que comportamento devemos validar?","x":180,"y":280,"width":320,"height":120,"color":"4"}
+  ],
+  "edges": [
+    {"id":"e1","fromNode":"inicio","toNode":"conceito","fromSide":"right","toSide":"left","label":"link interno"},
+    {"id":"e2","fromNode":"inicio","toNode":"pergunta","fromSide":"bottom","toSide":"top"}
+  ]
+}

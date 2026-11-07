@@ -1,0 +1,18 @@
+import { createServer } from 'node:https';
+import { request } from 'node:http';
+import { mkdtemp, readFile } from 'node:fs/promises';
+import { rmSync } from 'node:fs';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { randomBytes } from 'node:crypto';
+import os from 'node:os';
+import path from 'node:path';
+import { createPasswordHashSync } from '../server/auth.mjs';
+const root = await mkdtemp(path.join(os.tmpdir(), 'notesprig-production-'));
+const cert = path.join(root, 'cert.pem'), key = path.join(root, 'key.pem');
+await promisify(execFile)('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', key, '-out', cert, '-days', '1', '-subj', '/CN=localhost', '-addext', 'subjectAltName=DNS:localhost,IP:127.0.0.1']);
+process.env.NODE_ENV = 'production'; process.env.HOST = '127.0.0.1'; process.env.PORT = '4320'; process.env.TRUST_PROXY = '1'; process.env.NOTESPRIG_VAULT = path.join(root, 'vault'); process.env.NOTESPRIG_PASSWORD_HASH = createPasswordHashSync('production-test-password'); process.env.SESSION_SECRET = randomBytes(32).toString('hex');
+process.on('exit', () => rmSync(root, { recursive: true, force: true }));
+await import('../server/index.mjs');
+const proxy = createServer({ cert: await readFile(cert), key: await readFile(key) }, (req, res) => { const upstream = request({ host: '127.0.0.1', port: 4320, method: req.method, path: req.url, headers: { ...req.headers, 'x-forwarded-proto': 'https', 'x-forwarded-host': req.headers.host } }, (response) => { res.writeHead(response.statusCode, response.headers); response.pipe(res); }); upstream.on('error', () => { res.writeHead(502); res.end(); }); req.pipe(upstream); });
+proxy.listen(4319, '127.0.0.1');

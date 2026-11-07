@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="100" viewBox="0 0 360 100">
+  <rect x="10" y="20" width="150" height="60" rx="8" fill="#e8eefc" stroke="#345"/>
+  <text x="85" y="55" text-anchor="middle" font-family="sans-serif" font-size="14">Nota A</text>
+  <path d="M160 50h40m0 0-8-8m8 8-8 8" fill="none" stroke="#345" stroke-width="2"/>
+  <rect x="200" y="20" width="150" height="60" rx="8" fill="#e7f5ea" stroke="#345"/>
+  <text x="275" y="55" text-anchor="middle" font-family="sans-serif" font-size="14">Nota B</text>
+</svg>

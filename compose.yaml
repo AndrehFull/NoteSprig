@@ -1,0 +1,31 @@
+services:
+  notesprig:
+    build: .
+    container_name: notesprig
+    restart: unless-stopped
+    init: true
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 4317
+      TRUST_PROXY: "1"
+      NOTESPRIG_VAULT: /data/vault
+      NOTESPRIG_PASSWORD_HASH: ${NOTESPRIG_PASSWORD_HASH:?configure NOTESPRIG_PASSWORD_HASH in .env}
+      SESSION_SECRET: ${SESSION_SECRET:?configure SESSION_SECRET in .env}
+    volumes:
+      - ./data:/data
+    ports:
+      - "127.0.0.1:4317:4317"
+    healthcheck:
+      test: ["CMD", "node", "--input-type=module", "-e", "fetch('http://127.0.0.1:4317/api/session').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3

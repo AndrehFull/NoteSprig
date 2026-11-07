@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily NoteSprig backup at 03:15 America/Sao_Paulo
+
+[Timer]
+OnCalendar=*-*-* 03:15:00 America/Sao_Paulo
+Persistent=true
+RandomizedDelaySec=300
+Unit=notesprig-backup.service
+
+[Install]
+WantedBy=timers.target

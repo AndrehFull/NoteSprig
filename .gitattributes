@@ -1,0 +1,10 @@
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+# Preserve upstream license texts verbatim, including their whitespace.
+docs/legal/THIRD_PARTY_LICENSES.txt -whitespace

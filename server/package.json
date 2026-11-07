@@ -1,0 +1,15 @@
+{
+  "name": "notesprig-server",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "fflate": "^0.8.2",
+    "yaml": "^2.8.1"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "description": "Filesystem API for the NoteSprig personal knowledge workspace."
+}

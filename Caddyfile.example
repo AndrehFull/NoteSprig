@@ -1,0 +1,5 @@
+# Keep the app port bound to localhost in compose. Caddy terminates HTTPS.
+notes.example.com {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:4317
+}

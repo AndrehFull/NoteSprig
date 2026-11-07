@@ -1,0 +1,21 @@
+node_modules/
+.local/
+dist/
+*.tsbuildinfo
+.env
+data/
+# Local browser profiles, caches, and experiment traces.
+LAB/RUN/
+test-results/
+playwright-report/
+backups/
+*.obak
+.env.*
+!.env.example
+*.log
+*.pem
+*.key
+*.p12
+*.pfx
+.DS_Store
+Thumbs.db

@@ -1,0 +1,17 @@
+[Unit]
+Description=NoteSprig encrypted backup
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/notesprig
+EnvironmentFile=/etc/notesprig/backup.env
+ExecStart=/opt/notesprig/scripts/backup-vps.sh
+Nice=10
+IOSchedulingClass=idle
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/opt/notesprig/backups
