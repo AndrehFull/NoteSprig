@@ -15,7 +15,7 @@ import { currentContext, refreshWorkspaceContext } from '../workspace';
 import { boardCards, cardMetadata, sameContext, validateBoard, type ReferenceContext, type BoardElement } from '../../shared/board-schema.mjs';
 import type { NoteSummary, Version } from '../types';
 
-export default function BoardView({path,files,theme,onOpenNote,onSaved,featureEnabled}:{featureEnabled:boolean;path:string;files:NoteSummary[];theme:'light'|'dark';onOpenNote:(path:string,context:ReferenceContext)=>Promise<void>;onSaved:()=>void}) {
+export default function BoardView({path,files,theme,onOpenNote,onSaved}:{path:string;files:NoteSummary[];theme:'light'|'dark';onOpenNote:(path:string,context:ReferenceContext)=>Promise<void>;onSaved:()=>void}) {
   const session=useMemo(()=>boardSession(path),[path]);
   const state=useSyncExternalStore(session.subscribe,session.snapshot);
   const engine=useRef<ExcalidrawImperativeAPI|null>(null);
@@ -93,12 +93,12 @@ export default function BoardView({path,files,theme,onOpenNote,onSaved,featureEn
     return()=>{window.removeEventListener('online',online);window.removeEventListener('beforeunload',unload);document.removeEventListener('visibilitychange',flush);};
   },[session,onSaved]);
   async function addNote() {
-    if(!featureEnabled||!board||!engine.current||!target)return;
+    if(!board||!engine.current||!target)return;
     try {const runtime=await loadBoardRuntime(),card=await createNoteCard(target,{x:60-viewport.scrollX+(cards.length%8)*24,y:60-viewport.scrollY+(cards.length%8)*24});engine.current.updateScene({elements:[...engine.current.getSceneElementsIncludingDeleted(),card],captureUpdate:runtime.CaptureUpdateAction.IMMEDIATELY});}
     catch(error){setNotice(translateMessage((error as Error).message));}
   }
   async function addImage(file:File) {
-    if(!featureEnabled||!board||!engine.current)return;
+    if(!board||!engine.current)return;
     try {
       const image=await session.addImage(file),runtime=await loadBoardRuntime();
       const [rectangle]=runtime.convertToExcalidrawElements([{type:'rectangle',x:80-viewport.scrollX,y:80-viewport.scrollY,width:Math.min(500,image.asset.width),height:Math.min(500,image.asset.width)*image.asset.height/image.asset.width}]);
@@ -135,7 +135,7 @@ export default function BoardView({path,files,theme,onOpenNote,onSaved,featureEn
     }catch(error){setNotice(translateMessage((error as Error).message));}
   }
   async function reviewReferences() {
-    if(!featureEnabled||!board||!state.draft||!review)return;
+    if(!board||!state.draft||!review)return;
     try {
       const fresh=await refreshWorkspaceContext(api.boardContext);setContext(fresh);
       const saved=await api.reviewBoard({path,baseHash:state.draft.hash,context:fresh,previousContext:board.referenceContext,bindings:cards.map(element=>({elementId:element.id,state:review[element.id]?'bound':'unbound',path:review[element.id]||undefined}))});
@@ -160,7 +160,7 @@ export default function BoardView({path,files,theme,onOpenNote,onSaved,featureEn
     }catch(error){setNotice(translateMessage((error as Error).message));}
   }
   async function commitImport() {
-    if(!featureEnabled||!candidate)return;
+    if(!candidate)return;
     try {
       const context=await api.boardContext();if(!sameContext(context,candidate.board.referenceContext))throw new Error(t('References changed; review bindings before continuing.'));
       for(const asset of Object.values(candidate.board.assets)) {const bytes=candidate.assets[asset.sha256];if(!bytes)throw new Error(t('A required board image is missing or changed.'));await api.uploadBoardAsset(assetDataURL(asset,bytes).split(',')[1],context);}
@@ -173,7 +173,7 @@ export default function BoardView({path,files,theme,onOpenNote,onSaved,featureEn
 
 
   async function restoreVersion(id:string) {
-    if(!featureEnabled||!state.draft)return;
+    if(!state.draft)return;
     try {
       if(state.draft.dirty)throw new Error(t('Synchronize or export this draft before restoring history.'));
       const context=await refreshWorkspaceContext(api.boardContext);setContext(context);
@@ -186,22 +186,20 @@ export default function BoardView({path,files,theme,onOpenNote,onSaved,featureEn
   const selectedCards=cards.filter(card=>selected.includes(card.id));
   return <section className="board-view" aria-label={t('Visual board')}>
     <header className="board-toolbar"><strong>{path.split('/').at(-1)?.replace(/\.board$/i,'')}</strong><span role="status">{t(state.status==='device'?'Saved on this device':state.status==='saved'?'Saved':state.status==='saving'?'Saving…':state.status==='loading'?'Loading…':state.status==='editing'?'Saving on this device…':'Save needs attention')}</span>{offlineReady&&<span>{t('Drawing tools ready offline')}</span>}<button disabled={!board} onClick={()=>void api.history(path).then(setVersions).catch(error=>setNotice(translateMessage(error.message)))}>{t("Version history")}</button><button onClick={()=>void privateRecovery()} disabled={!board}>{t('Private recovery')}</button><button onClick={()=>void session.save().then(onSaved)} disabled={!board||stale}>{t('Save')}</button><details><summary>{t('Share')}</summary><p>{t('Export contains visible note excerpts. Unavailable cards use placeholders.')}</p>{(['excalidraw','png','svg'] as const).map(kind=><button key={kind} onClick={()=>void share(kind)}>{kind.toUpperCase()}</button>)}</details></header>
-    {!featureEnabled&&<p className="board-notice" role="status">{t("Experimental editing is disabled. You can view and export recovery.")}</p>}
     {(state.error||notice)&&<p className="board-notice" role="alert">{state.error||notice}</p>}
     {exportReport.length>0&&<details className="board-note-list"><summary>{t("Conversion report")}</summary><ul>{exportReport.map(message=><li key={message}>{message}</li>)}</ul></details>}
-    {needsReview&&<div className="board-notice" role="alert">{t('Reference review required')} <button disabled={!featureEnabled||state.draft?.dirty} onClick={()=>setReview(Object.fromEntries(cards.map(card=>[card.id,''])))}>{t('Review references')}</button></div>}
+    {needsReview&&<div className="board-notice" role="alert">{t('Reference review required')} <button disabled={state.draft?.dirty} onClick={()=>setReview(Object.fromEntries(cards.map(card=>[card.id,''])))}>{t('Review references')}</button></div>}
     {review&&<div className="board-review"><p>{t('Choose each note explicitly. Empty choices remain unbound.')}</p>{cards.map((card,index)=><label key={card.id}>{t('Note card')} {index+1}<select value={review[card.id]} onChange={event=>setReview({...review,[card.id]:event.target.value})}><option value="">{t('Keep unbound')}</option>{files.filter(file=>file.kind==='markdown').map(file=><option key={file.path}>{file.path}</option>)}</select></label>)}<button onClick={()=>void reviewReferences()}>{t('Confirm reference review')}</button><button onClick={()=>setReview(null)}>{t('Cancel')}</button></div>}
-    <div className="board-actions"><button disabled={!featureEnabled} onClick={()=>importInput.current?.click()}>{t("Import as a copy")}</button><input ref={importInput} hidden type="file" accept=".canvas,.excalidraw,.board,.zip" onChange={event=>{const file=event.target.files?.[0];if(file)void importFile(file);event.target.value="";}}/><label>{t('Add note card')}<select aria-label={t('Choose a note')} value={target} onChange={event=>setTarget(event.target.value)}><option value="">{t('Choose a note')}</option>{files.filter(file=>file.kind==='markdown').map(file=><option key={file.path} value={file.path}>{file.path}</option>)}</select></label><button disabled={!featureEnabled||!target||stale} onClick={()=>void addNote()}>{t('Add')}</button><button disabled={!featureEnabled||stale} onClick={()=>imageInput.current?.click()}>{t('Add image')}</button><input ref={imageInput} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={event=>{const file=event.target.files?.[0];if(file)void addImage(file);event.target.value='';}}/>{selectedCards.map(card=><button key={card.id} onClick={()=>void openCard(card.id)}>{t('Open note')}</button>)}</div>
-    {versions&&<div className="board-review"><h3>{t("Version history")}</h3><ul>{versions.map(version=><li key={version.id}>{new Date(version.createdAt).toLocaleString()} <button disabled={!featureEnabled||state.draft?.dirty} onClick={()=>void restoreVersion(version.id)}>{t("Restore version")}</button></li>)}</ul><button onClick={()=>setVersions(null)}>{t("Close")}</button></div>}
+    <div className="board-actions"><button onClick={()=>importInput.current?.click()}>{t("Import as a copy")}</button><input ref={importInput} hidden type="file" accept=".canvas,.excalidraw,.board,.zip" onChange={event=>{const file=event.target.files?.[0];if(file)void importFile(file);event.target.value="";}}/><label>{t('Add note card')}<select aria-label={t('Choose a note')} value={target} onChange={event=>setTarget(event.target.value)}><option value="">{t('Choose a note')}</option>{files.filter(file=>file.kind==='markdown').map(file=><option key={file.path} value={file.path}>{file.path}</option>)}</select></label><button disabled={!target||stale} onClick={()=>void addNote()}>{t('Add')}</button><button disabled={stale} onClick={()=>imageInput.current?.click()}>{t('Add image')}</button><input ref={imageInput} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={event=>{const file=event.target.files?.[0];if(file)void addImage(file);event.target.value='';}}/>{selectedCards.map(card=><button key={card.id} onClick={()=>void openCard(card.id)}>{t('Open note')}</button>)}</div>
+    {versions&&<div className="board-review"><h3>{t("Version history")}</h3><ul>{versions.map(version=><li key={version.id}>{new Date(version.createdAt).toLocaleString()} <button disabled={state.draft?.dirty} onClick={()=>void restoreVersion(version.id)}>{t("Restore version")}</button></li>)}</ul><button onClick={()=>setVersions(null)}>{t("Close")}</button></div>}
     {candidate&&<div className="board-review"><h3>{t('Review imported copy')}</h3><p>{t('Original source is preserved. Imported note cards stay unbound until explicitly reviewed.')}</p><label>{t('Board name')}<input aria-label={t('Imported board name')} value={importName} onChange={event=>setImportName(event.target.value)}/></label><details><summary>{t('Conversion report')} ({candidate.report.issues.length})</summary><ul>{candidate.report.issues.map((issue,index)=><li key={index}>{conversionDescription(issue.code)}</li>)}</ul></details><button onClick={()=>void commitImport()}>{t('Create imported copy')}</button><button onClick={()=>setCandidate(null)}>{t('Cancel')}</button></div>}
     <div className="board-stage" onDragOverCapture={event=>{if(event.dataTransfer.types.includes('text/x-notesprig-file'))event.preventDefault();}} onDropCapture={event=>{
       const path=event.dataTransfer.getData('text/x-notesprig-file');if(!path)return;event.preventDefault();event.stopPropagation();
-      if(!featureEnabled||stale||!board||!engine.current||!files.some(file=>file.path===path&&file.kind==='markdown'))return;
+      if(stale||!board||!engine.current||!files.some(file=>file.path===path&&file.kind==='markdown'))return;
       const position={clientX:event.clientX,clientY:event.clientY};void loadBoardRuntime().then(async runtime=>{const api=engine.current;if(!api)return;const point=runtime.viewportCoordsToSceneCoords(position,api.getAppState());const card=await createNoteCard(path,point);api.updateScene({elements:[...api.getSceneElementsIncludingDeleted(),card],captureUpdate:runtime.CaptureUpdateAction.IMMEDIATELY});}).catch(error=>setNotice(translateMessage(error.message)));
     }}>{board&&state.status!=='loading'&&<BoardEngine key={`${board.boardId}:${board.referenceContext.epoch}:${engineRevision}`} documentKey={`${board.boardId}:${board.referenceContext.epoch}`} renderKey={JSON.stringify(visibleIds.map(id=>previews[id]))} initialScene={{elements:board.scene.elements as unknown as ExcalidrawElement[],appState:board.scene.appState as Partial<AppState>}} files={state.files as BinaryFiles} previews={previews} visibleCardIds={visibleIds} onViewportChange={setViewport} onReady={api=>{engine.current=api;}} onPersistentChange={({elements,appearance})=>{
-      if(!featureEnabled)return;
       try {const latest=session.state.draft!.board;session.edit({...latest,scene:{elements:elements as unknown as BoardElement[],appState:appearance}});}catch(error){setNotice(translateMessage((error as Error).message));}
-    }} onSelectionChange={setSelected} onOpenCard={id=>void openCard(id)} theme={theme} readOnly={!featureEnabled||stale} onBlockedIngress={()=>setNotice(t('Use the NoteSprig toolbar to import files.'))}/>}</div>
+    }} onSelectionChange={setSelected} onOpenCard={id=>void openCard(id)} theme={theme} readOnly={stale} onBlockedIngress={()=>setNotice(t('Use the NoteSprig toolbar to import files.'))}/>}</div>
     <details className="board-note-list"><summary>{t('Note cards')} ({cards.length})</summary><ul>{cards.map(card=><li key={card.id}><span>{cardMetadata(card)?.binding.path}</span><button onClick={()=>{if(!engine.current)return;engine.current.scrollToContent([card as unknown as ExcalidrawElement],{fitToContent:true,maxZoom:1});}}>{t('Locate')}</button><button disabled={stale||cardMetadata(card)?.binding.state!=='bound'} onClick={()=>void openCard(card.id)}>{t('Open note')}</button></li>)}</ul></details>
   </section>;
 }
