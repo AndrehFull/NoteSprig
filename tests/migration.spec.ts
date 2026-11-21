@@ -59,8 +59,9 @@ test('legacy backup format restores using the legacy password variable', async (
   } finally { await rm(work, { recursive: true, force: true }); }
 });
 
-for (const hasCurrent of [false, true]) test(`legacy drafts and preferences migrate ${hasCurrent ? 'without replacing current drafts' : 'and survive reload'}`, async ({ page }) => {
+for (const hasCurrent of [false, true]) test(`unscoped legacy drafts remain quarantined ${hasCurrent ? 'without replacing a newer draft' : 'across reload'} until explicit recovery`, async ({ page }) => {
   const folder = `Migração-${randomUUID().slice(0, 8)}`, file = `${folder}/Nota.md`;
+  const recoveredPaths:string[]=[];
   await page.request.post('/api/login', { data: { password: 'test-session-only' } });
   const created = await page.request.post('/api/note', { data: { path: file, content: '# Servidor' } }); const note = await created.json(); expect(created.ok()).toBe(true);
   const expected = hasCurrent ? '# Rascunho mais recente' : '# Rascunho anterior recuperado';
@@ -76,18 +77,44 @@ for (const hasCurrent of [false, true]) test(`legacy drafts and preferences migr
       localStorage.setItem(`${prefix}.workspace`, JSON.stringify({ tabs: [{ id: `note:${note.path}`, kind: 'note', path: note.path }], selected: `note:${note.path}`, split: 'right', modes: {} }));
       if (hasCurrent) localStorage.setItem('notesprig.theme', 'dark');
     }, { database: LEGACY_DATABASE, prefix: legacyBrowserPrefix, note, hasCurrent });
-    await page.goto('/'); await expect(page).toHaveTitle('NoteSprig'); await expect(page.getByRole('tab', { name: 'Nota', exact: true })).toBeVisible();
-    await expect.poll(async () => (await (await page.request.get('/api/note?path=' + encodeURIComponent(file))).json()).content).toBe(expected);
+    await page.goto('/'); await expect(page).toHaveTitle('NoteSprig');
+    const recovery=page.getByRole('dialog',{name:'Recuperação privada',exact:true});
+    await expect(recovery).toBeVisible();
+    expect((await(await page.request.get('/api/note?path='+encodeURIComponent(file))).json()).content).toBe('# Servidor');
+    expect(await page.evaluate(async(file)=>new Promise((resolve,reject)=>{const open=indexedDB.open('notesprig-private');open.onerror=()=>reject(open.error);open.onsuccess=()=>{const db=open.result,store=db.transaction('state').objectStore('state'),draft=store.get('quarantine:doc:'+file);draft.onsuccess=()=>{db.close();resolve(draft.result?.content);};};}),file)).toBe(expected);
     expect(await page.evaluate(() => localStorage.getItem('notesprig.theme'))).toBe(hasCurrent ? 'dark' : 'light');
+    // Compatibility keeps the old preference bytes; scoped private UI does not silently adopt their paths.
     expect(await page.evaluate(() => JSON.parse(localStorage.getItem('notesprig.bookmarks') || '[]'))).toContain(file);
-    await page.reload(); await expect(page.locator('.cm-content')).toContainText(expected.replace('# ', ''));
-    await page.getByRole('button', { name: 'Sair', exact: true }).click(); await expect(page.getByRole('heading', { name: 'NoteSprig', exact: true })).toBeVisible();
+    expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('notesprig.workspace')||'{}').tabs[0].path)).toBe(file);
+    await expect(page.getByRole('tab',{name:'Nota',exact:true})).toHaveCount(0);
+    await page.reload(); await expect(recovery).toBeVisible();
+    expect((await(await page.request.get('/api/note?path='+encodeURIComponent(file))).json()).content).toBe('# Servidor');
+    const exported=page.waitForEvent('download');await recovery.getByRole('button',{name:'Baixar recuperação privada deste dispositivo',exact:true}).click();
+    const downloaded=await(await exported).path();expect(downloaded).toBeTruthy();
+    const exportedJSON=JSON.parse(await readFile(downloaded!,'utf8'));
+    expect(exportedJSON.type).toBe('notesprig-device-recovery');expect(exportedJSON.entries.some(([key,value]:[string,{content?:string}])=>key==='quarantine:doc:'+file&&value.content===expected)).toBe(true);
+    if(hasCurrent)expect(exportedJSON.entries.some(([key,value]:[string,{content?:string}])=>key==='quarantine:legacy:doc:'+file&&value.content==='# Rascunho anterior recuperado')).toBe(true);
+    await recovery.getByRole('button',{name:'Cancelar',exact:true}).click();
+    expect((await(await page.request.get('/api/session')).json()).authenticated).toBe(true);
+    await page.getByRole('button',{name:'Sair',exact:true}).click();await expect(recovery).toBeVisible();
+    const copies:string[]=[];
+    for(let index=0;index<(hasCurrent?2:1);index++){
+      const createdCopy=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/note'&&response.request().method()==='POST');
+      const recoverButton=recovery.getByRole('button',{name:'Recuperar como nova nota',exact:true}).first();await expect(recoverButton).toBeVisible();await recoverButton.click();
+      const copy=await(await createdCopy).json();recoveredPaths.push(copy.path);expect(copy.path).toMatch(/^Recovered\/[^/]+\.md$/);copies.push(copy.content);
+      await expect(recovery.getByRole('button',{name:'Recuperar como nova nota',exact:true})).toHaveCount((hasCurrent?2:1)-index-1);
+    }
+    expect(copies).toContain(expected);if(hasCurrent)expect(copies).toContain('# Rascunho anterior recuperado');
+    expect((await(await page.request.get('/api/note?path='+encodeURIComponent(file))).json()).content).toBe('# Servidor');
+    const discard=recovery.getByRole('button',{name:'Descartar alterações pendentes e sair',exact:true});await expect(discard).toBeDisabled();
+    await recovery.getByRole('checkbox',{name:'Verifiquei o arquivo de recuperação ou escolho descartar estas alterações.',exact:true}).check();await discard.click();
+    await expect(page.getByRole('heading', { name: 'NoteSprig', exact: true })).toBeVisible();
     const cacheState = await page.evaluate(async ({ database, migration }) => {
       const read = (name: string) => new Promise<unknown[]>((resolve) => { const open = indexedDB.open(name); open.onsuccess = () => { const db = open.result, request = db.transaction('state').objectStore('state').getAll(); request.onsuccess = () => { db.close(); resolve(request.result); }; }; });
       return { old: await read(database), current: await read('notesprig-private'), marker: migration };
     }, { database: LEGACY_DATABASE, migration: PRIVATE_MIGRATION });
     expect(cacheState.old).toEqual([]); expect(cacheState.current).toContain(true); expect(cacheState.current.some((value) => value && typeof value === 'object' && 'content' in value)).toBe(false);
-  } finally { await page.request.post('/api/login', { data: { password: 'test-session-only' } }); await page.request.delete('/api/note?path=' + encodeURIComponent(folder), { headers: { 'Content-Type': 'application/json' } }); }
+  } finally { await page.request.post('/api/login', { data: { password: 'test-session-only' } }); await page.request.delete('/api/note?path=' + encodeURIComponent(folder), { headers: { 'Content-Type': 'application/json' } });for(const recoveredPath of recoveredPaths)await page.request.delete('/api/note?path='+encodeURIComponent(recoveredPath),{ headers: { 'Content-Type': 'application/json' } }); }
 });
 
 test('PWA migrates cached attachments and reloads offline with the current identity', async ({ page, context }) => {
@@ -98,7 +125,8 @@ test('PWA migrates cached attachments and reloads offline with the current ident
     const media = await caches.open(`${prefix}-media-v1`); await media.put(attachment, new Response('cached legacy attachment', { headers: { 'Content-Type': 'application/octet-stream' } }));
   }, { prefix: legacyBrowserPrefix, attachment });
   await page.goto('/'); await expect(page.getByRole('region', { name: 'Grafo global', exact: true })).toBeVisible();
-  await expect.poll(() => page.evaluate(async (prefix) => { const keys = await caches.keys(); return Boolean(navigator.serviceWorker.controller) && keys.includes('notesprig-media-v1') && !keys.some((key) => key.startsWith(`${prefix}-shell-`) || key === `${prefix}-media-v1`); }, legacyBrowserPrefix)).toBe(true);
+  // Public old shell chunks can remain while an older client is open. Private legacy media migrates and is removed.
+  await expect.poll(() => page.evaluate(async (prefix) => { const keys = await caches.keys(); return Boolean(navigator.serviceWorker.controller) && keys.includes('notesprig-media-v1') && !keys.includes(`${prefix}-media-v1`); }, legacyBrowserPrefix)).toBe(true);
   expect(await page.evaluate(async (url) => (await (await caches.open('notesprig-media-v1')).match(url))?.text(), attachment)).toBe('cached legacy attachment');
   try {
     await context.setOffline(true);

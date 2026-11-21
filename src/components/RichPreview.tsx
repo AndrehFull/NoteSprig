@@ -2,6 +2,7 @@ import { useLanguage } from '../i18n';
 import { useEffect, useMemo, useRef } from 'react';
 import DOMPurify from 'dompurify';
 import { api } from '../api';
+import { mediaUrl } from '../media';
 import { resolveTargets } from '../knowledge';
 import { resolveAsset } from '../paths';
 import { renderMarkdown } from '../markdown';
@@ -24,7 +25,7 @@ export function extractSection(content: string, fragment = '') {
 let mermaidQueue = Promise.resolve();
 export async function hydrateRichContent(root: HTMLElement, path: string, files: NoteSummary[], cancelled = () => false, depth = 0) {
   const paths = files.filter((file) => file.kind !== 'folder').map((file) => file.path);
-  for (const image of root.querySelectorAll<HTMLImageElement>('img[data-local-image]')) { image.src = `/api/attachment?path=${encodeURIComponent(resolveAsset(decodeURIComponent(image.dataset.localImage || ''), path, paths))}`; image.removeAttribute('data-local-image'); }
+  for (const image of root.querySelectorAll<HTMLImageElement>('img[data-local-image]')) { image.src = mediaUrl(resolveAsset(decodeURIComponent(image.dataset.localImage || ''), path, paths)); image.removeAttribute('data-local-image'); }
   const math = [...root.querySelectorAll<HTMLElement>('[data-math]')];
   if (math.length) {
     const katex = (await import('katex')).default;
@@ -48,7 +49,7 @@ export async function hydrateRichContent(root: HTMLElement, path: string, files:
     if (cancelled()) return;
     let target = ''; try { target = decodeURIComponent(element.dataset.notesprigEmbed || ''); } catch { return; }
     const [raw, ...fragment] = target.split('#'); const resolved = resolveAsset(raw, path, paths);
-    const url = `/api/attachment?path=${encodeURIComponent(resolved)}`;
+    const url = mediaUrl(resolved);
     if (/\.(png|jpe?g|gif|svg|avif|webp)$/i.test(raw)) { const image = document.createElement('img'); image.src = url; image.alt = raw; image.loading = 'lazy'; const dimensions = (element.dataset.embedLabel || '').match(/^(\d+)(?:x(\d+))?$/); if (dimensions) { image.style.width = `${Math.min(4000, +dimensions[1])}px`; if (dimensions[2]) image.style.height = `${Math.min(4000, +dimensions[2])}px`; } element.replaceChildren(image); }
     else if (/\.(mp3|wav|ogg|m4a|mp4|webm)$/i.test(raw)) { const media = document.createElement(/\.(mp4|webm)$/i.test(raw) && !raw.split('/').at(-1)?.startsWith('Recording-') ? 'video' : 'audio'); media.src = url; media.controls = true; media.preload = 'metadata'; element.replaceChildren(media); }
     else if (/\.pdf$/i.test(raw)) { const frame = document.createElement('iframe'); frame.src = `${url}${fragment.length ? `#${fragment.join('#')}` : ''}`; frame.title = raw; frame.className = 'pdf-embed'; element.replaceChildren(frame); }

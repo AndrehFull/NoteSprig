@@ -1,12 +1,17 @@
+import { currentContext } from './workspace';
+import type { BoardDocument, ReferenceContext, BoardAsset } from '../shared/board-schema.mjs';
 import { t, translateMessage, getLocale } from './i18n';
 import type { NoteDocument, NoteSummary, SearchItem, Version, TrashEntry } from './types';
-async function request<T>(url: string, init?: RequestInit): Promise<T> {
+export async function request<T>(url: string, init?: RequestInit): Promise<T> {
+    let workspaceHeaders:Record<string,string>={};
+    if(!/^\/api\/(?:session|login|logout|boards\/context)$/.test(url)) {try {workspaceHeaders={'X-NoteSprig-Context':JSON.stringify(currentContext())};} catch { /* Bootstrap endpoints establish identity before private app calls. */ }}
     const response = await fetch(url, {
         credentials: 'same-origin',
         signal: init?.signal || AbortSignal.timeout(30000),
         ...init,
         headers: {
             'Accept-Language': getLocale(),
+            ...workspaceHeaders,
             ...(init?.body || ['POST', 'PUT', 'DELETE'].includes(init?.method || '') ? { 'Content-Type': 'application/json' } : {}),
             ...init?.headers,
         },
@@ -22,6 +27,14 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
     return data as T;
 }
 export const api = {
+    boardContext: () => request<ReferenceContext>('/api/boards/context'),
+    board: (path: string, context: ReferenceContext) => request<{path:string;board:BoardDocument;hash:string}>(`/api/boards?path=${encodeURIComponent(path)}&context=${encodeURIComponent(JSON.stringify(context))}`),
+    saveBoard: (payload: {path:string;board:BoardDocument;baseHash?:string;context:ReferenceContext}, create = false, signal?:AbortSignal) => request<{path:string;board:BoardDocument;hash:string}>('/api/boards', {method:create?'POST':'PUT',body:JSON.stringify(payload),signal}),
+    boardPreview: (path:string, context:ReferenceContext, fragment?:string, signal?:AbortSignal) => request<{title:string;excerpt:string;status:'ready';revision:string}>('/api/boards/preview',{method:'POST',body:JSON.stringify({path,context,fragment}),signal}),
+    boardAsset: (asset:BoardAsset, context:ReferenceContext) => request<{base64:string;sha256:string;mimeType:string}>(`/api/boards/asset?sha256=${asset.sha256}&mimeType=${encodeURIComponent(asset.mimeType)}&context=${encodeURIComponent(JSON.stringify(context))}`),
+    uploadBoardAsset: (base64:string,context:ReferenceContext,signal?:AbortSignal) => request<BoardAsset>('/api/boards/assets',{method:'POST',body:JSON.stringify({base64,context}),signal}),
+    restoreBoard: (payload:{path:string;id:string;baseHash:string;context:ReferenceContext}) => request<{path:string;board:BoardDocument;hash:string}>('/api/boards/restore',{method:'POST',body:JSON.stringify(payload)}),
+    reviewBoard: (payload:{path:string;baseHash:string;context:ReferenceContext;previousContext:ReferenceContext;bindings:{elementId:string;state:'bound'|'unbound';path?:string;fragment?:string}[]}) => request<{path:string;board:BoardDocument;hash:string}>('/api/boards/review',{method:'POST',body:JSON.stringify(payload)}),
     session: () => request<{
         authenticated: boolean;
     }>('/api/session'),
@@ -67,13 +80,13 @@ export const api = {
         imported: number;
         skipped: string[];
     }>('/api/import-zip', { method: 'POST', body: JSON.stringify({ base64: await fileBase64(file), overwrite }) }),
-    note: (path: string) => request<NoteDocument>(`/api/note?path=${encodeURIComponent(path)}`),
-    save: (note: Pick<NoteDocument, 'path' | 'content' | 'hash'>) => request<NoteDocument>('/api/note', {
+    note: (path: string, referenceContext?:ReferenceContext) => request<NoteDocument>(`/api/note?path=${encodeURIComponent(path)}${referenceContext?'&referenceContext='+encodeURIComponent(JSON.stringify(referenceContext)):''}`),
+    save: (note: Pick<NoteDocument, 'path' | 'content' | 'hash' | 'referenceContext' | 'workspaceContext'>) => request<NoteDocument>('/api/note', {
         method: 'PUT',
-        body: JSON.stringify({ path: note.path, content: note.content, baseHash: note.hash }),
+        body: JSON.stringify({ path: note.path, content: note.content, baseHash: note.hash, referenceContext: note.referenceContext, workspaceContext: note.workspaceContext }),
     }),
-    create: (path: string, content: string) => request<NoteDocument>('/api/note', {
-        method: 'POST', body: JSON.stringify({ path, content }),
+    create: (path: string, content: string, workspaceContext?:ReferenceContext) => request<NoteDocument>('/api/note', {
+        method: 'POST', body: JSON.stringify({ path, content, workspaceContext }),
     }),
     rename: (oldPath: string, newPath: string, updateLinks = true) => request<{
         path: string;

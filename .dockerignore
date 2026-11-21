@@ -21,3 +21,5 @@ backups
 *.key
 .env.*
 !.env.example
+
+public/board-assets

@@ -1,5 +1,6 @@
+import type { ReferenceContext } from '../shared/board-schema.mjs';
 export type NoteSummary = {
-  kind?: 'markdown' | 'canvas' | 'base' | 'attachment' | 'folder';
+  kind?: 'markdown' | 'canvas' | 'base' | 'board' | 'attachment' | 'folder';
   path: string;
   title: string;
   aliases: string[];
@@ -15,6 +16,8 @@ export type NoteDocument = NoteSummary & {
   body: string;
   properties: Record<string, unknown>;
   hash: string;
+  referenceContext?: ReferenceContext;
+  workspaceContext?: ReferenceContext;
 };
 
 export type SearchItem = {

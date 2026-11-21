@@ -114,10 +114,13 @@ test('pinned tabs, split panes, and editor modes survive reload', async ({ page 
 test('offline draft survives reload and resolves conflicts after reconnection', async ({ page, context }) => {
   const dir = folder(), path = `${dir}/Offline.md`; let conflictCopy = ''; await auth(page.request);
   try {
-    await create(page.request, path, '# Original\n'); await page.goto('/'); await open(page, path); await page.getByRole('button', { name: 'Fonte', exact: true }).click();
+    await create(page.request, path, '# Original\n');
+    const identity=await(await page.request.get('/api/boards/context')).json();
+    const cacheKey=`workspace:${identity.vaultId}:${identity.restoreGeneration}:doc:${path}`;
+    await page.goto('/'); await open(page, path); await page.getByRole('button', { name: 'Fonte', exact: true }).click();
     await page.waitForFunction(async () => Boolean((await navigator.serviceWorker.ready).active)); await page.waitForFunction(() => Boolean(navigator.serviceWorker.controller));
     await context.setOffline(true); const editor = page.locator('.cm-content'); await editor.click(); await page.keyboard.press('Control+End'); await page.keyboard.insertText('\nTexto criado offline.\n');
-    await page.waitForFunction(async (path) => new Promise<boolean>((resolve) => { const open = indexedDB.open('notesprig-private'); open.onsuccess = () => { const request = open.result.transaction('state').objectStore('state').get(`doc:${path}`); request.onsuccess = () => resolve(Boolean(request.result?.dirty && request.result.content.includes('Texto criado offline.'))); }; }), path);
+    await page.waitForFunction(async (cacheKey) => new Promise<boolean>((resolve) => { const open = indexedDB.open('notesprig-private'); open.onsuccess = () => { const db=open.result,request = db.transaction('state').objectStore('state').get(cacheKey); request.onsuccess = () => {db.close();resolve(Boolean(request.result?.dirty && request.result.content.includes('Texto criado offline.')));}; }; }), cacheKey);
     page.once('dialog', (dialog) => dialog.accept()); await page.reload(); await expect(page.locator('.cm-content')).toContainText('Texto criado offline.'); await expect(page.locator('.titlebar')).toContainText('Offline');
     const remote = await note(page.request, path); const updated = await page.request.put('/api/note', { data: { path, content: '# Alterado em outro dispositivo\n', baseHash: remote.hash } }); expect(updated.ok()).toBe(true);
     await context.setOffline(false); await expect(page.getByRole('dialog')).toContainText('A nota mudou em outro lugar'); await page.getByRole('button', { name: 'Salvar como cópia', exact: true }).click();

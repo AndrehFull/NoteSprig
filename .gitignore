@@ -19,3 +19,4 @@ backups/
 *.pfx
 .DS_Store
 Thumbs.db
+public/board-assets/

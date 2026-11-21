@@ -50,9 +50,22 @@ export async function migrateLegacyPrivateCache(database: IDBDatabase) {
   }
   await new Promise<void>((resolve, reject) => {
     const transaction = database.transaction('state', 'readwrite'), store = transaction.objectStore('state');
+    const pending = (value: unknown) => Boolean(value && typeof value === 'object' && (('dirty' in value && value.dirty) || ('pending' in value && value.pending)));
+    const equal = (left: unknown, right: unknown) => { try { return JSON.stringify(left) === JSON.stringify(right); } catch { return false; } };
+    function preserveConflict(key: string, value: unknown, suffix = 0) {
+      const target = key + (suffix ? `:${suffix}` : '');
+      const current = store.get(target);
+      current.onsuccess = () => {
+        if (current.result === undefined) store.put(value, target);
+        else if (!equal(current.result, value)) preserveConflict(key, value, suffix + 1);
+      };
+    }
     for (const [index, key] of keys.entries()) {
       const request = store.get(key);
-      request.onsuccess = () => { if (request.result === undefined) store.put(values[index], key); };
+      request.onsuccess = () => {
+        if (request.result === undefined) store.put(values[index], key);
+        else if (pending(values[index]) && !equal(request.result, values[index])) preserveConflict(`quarantine:legacy:${String(key)}`, values[index]);
+      };
     }
     store.put(true, PRIVATE_MIGRATION);
     transaction.oncomplete = () => resolve(); transaction.onerror = () => reject(transaction.error); transaction.onabort = () => reject(transaction.error);

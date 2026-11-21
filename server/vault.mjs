@@ -6,9 +6,13 @@ import { zipSync, unzipSync } from 'fflate';
 import { parseFrontmatter } from './frontmatter.mjs';
 import { stringify as yamlStringify } from 'yaml';
 import { migrateVaultMetadata } from './legacy.mjs';
+import { BoardTransactions, normalizeBoardTransactionPath } from './board-transactions.mjs';
+import { BoardReferenceState } from './board-reference-state.mjs';
+import { isManagedPath, protectsManagedPath, validateBoard, boardCards, cardMetadata, sameContext } from '../shared/board-schema.mjs';
+import { kindForPath, documentLimit, documentTitle, isDocumentPath } from '../shared/document-kinds.mjs';
 const maxNoteBytes = 2 * 1024 * 1024;
 const maxFileBytes = 50 * 1024 * 1024;
-const allowedExtensions = new Set(['.md', '.canvas', '.base', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.avif', '.svg', '.pdf', '.mp3', '.wav', '.ogg', '.m4a', '.mp4', '.webm', '.txt', '.csv', '.json', '.zip']);
+const allowedExtensions = new Set(['.md', '.canvas', '.base', '.board', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.avif', '.svg', '.pdf', '.mp3', '.wav', '.ogg', '.m4a', '.mp4', '.webm', '.txt', '.csv', '.json', '.zip']);
 const mimeTypes = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.avif': 'image/avif', '.svg': 'image/svg+xml', '.pdf': 'application/pdf', '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.ogg': 'audio/ogg', '.m4a': 'audio/mp4', '.mp4': 'video/mp4', '.webm': 'video/webm', '.txt': 'text/plain; charset=utf-8' };
 const hash = (content) => createHash('sha256').update(content).digest('hex');
 const fail = (message, status = 400) => Object.assign(new Error(message), { status });
@@ -16,7 +20,7 @@ const stem = (value) => value.replace(/\.md$/i, '');
 const basename = (value) => path.posix.basename(stem(value));
 const copy = (value) => JSON.parse(JSON.stringify(value));
 export class Vault {
-    constructor(root) { this.root = path.resolve(root); this.queue = Promise.resolve(); }
+    constructor(root, boardOptions = {}) { this.root = path.resolve(root); this.queue = Promise.resolve(); this.boardOptions = boardOptions; }
     async initialize() {
         await mkdir(this.root, { recursive: true });
         this.root = await realpath(this.root);
@@ -24,6 +28,9 @@ export class Vault {
         await this.internalDirectory('.notesprig');
         await this.internalDirectory('.trash');
         await this.recoverTransaction();
+        this.boardTransactions = await new BoardTransactions(this.root, this.boardOptions).initialize();
+        this.boardReferences = new BoardReferenceState(this.root, this.boardTransactions);
+        await this.boardReferences.initialize((await this.list()).map((note) => note.path));
     }
     isInside(candidate) { const relative = path.relative(this.root, candidate); return relative !== '' && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative); }
     normalizeRelative(relative, directory = false) {
@@ -61,6 +68,7 @@ export class Vault {
         return target;
     }
     async checkedExistingPath(relative, directory = false) {
+        return this.barrier(async () => {
         const file = this.normalizeRelative(relative, directory);
         let cursor = this.root;
         for (const segment of file.relative.split('/')) {
@@ -74,14 +82,68 @@ export class Vault {
         if (!info.isFile() && !(directory && info.isDirectory()))
             throw fail("The path is not a file.");
         return { ...file, info };
+
+        });
     }
     mutate(action) {
+        if (this.boardTransactions) return this.boardTransactions.read(action);
         const task = this.queue.then(action);
         this.queue = task.catch(() => { });
         return task;
     }
+    barrier(action) { return this.boardTransactions ? this.boardTransactions.read(action) : action(); }
+    protectManaged(relative, ancestor = false) {
+        if ((ancestor ? protectsManagedPath : isManagedPath)(relative)) throw Object.assign(fail('Managed board assets are immutable. Use the board asset API.', 403), { code: 'MANAGED_BOARD_ASSET' });
+    }
+    rejectGenericBoard(relative) {
+        if (kindForPath(relative) === 'board') throw Object.assign(fail('Use the dedicated board API for board documents.', 400), { code: 'BOARD_API_REQUIRED' });
+    }
+    async historyPlan(requests) {
+        const writes = [], deletes = [], groups = new Map();
+        for (const request of requests) {
+            const directory = `.notesprig/history/${hash(request.path)}`;
+            let group = groups.get(directory);
+            if (!group) {
+                const exists = await this.boardTransactions.inspectDirectory(directory);
+                const names = exists ? (await readdir(path.join(this.root, directory))).filter((name) => /^[\d]+-[a-f\d-]{36}\.json$/.test(name)).sort() : [];
+                let lastHash;
+                if (names.length) { await this.boardTransactions.inspect(`${directory}/${names.at(-1)}`); lastHash = JSON.parse(await readFile(path.join(this.root, directory, names.at(-1)), 'utf8')).hash; }
+                group = { names, lastHash, added: 0 }; groups.set(directory, group);
+            }
+            const digest = hash(request.content); if (group.lastHash === digest) continue;
+            this.historyClock = Math.max(Date.now(), (this.historyClock || 0) + 1);
+            const id = `${this.historyClock}-${randomUUID()}`, record = { id, path: request.path, content: request.content, hash: digest, createdAt: this.historyClock, size: Buffer.byteLength(request.content), reason: request.reason || 'edit' };
+            writes.push({ path: `${directory}/${id}.json`, content: JSON.stringify(record), expectedHash: null }); group.lastHash = digest; group.added++;
+        }
+        for (const [directory, group] of groups) for (const name of group.names.slice(0, Math.max(0, group.names.length + group.added - 100))) {
+            const relative = `${directory}/${name}`; deletes.push({ path: relative, expectedHash: (await this.boardTransactions.inspect(relative)).hash });
+        }
+        return { writes, deletes };
+    }
+    async collectTree(relative) {
+        normalizeBoardTransactionPath(relative);
+        const files = [], directories = []; let bytes = 0, count = 0;
+        const walk = async (entry) => {
+            normalizeBoardTransactionPath(entry); let cursor = this.root, info;
+            for (const segment of entry.split('/')) {
+                cursor = path.join(cursor, segment); info = await lstat(cursor);
+                if (info.isSymbolicLink()) throw fail('Symbolic links are not allowed.');
+                if (cursor !== path.join(this.root, entry) && !info.isDirectory()) throw fail('A path ancestor is not a directory.');
+            }
+            if (++count > this.boardTransactions.limits.documents) throw fail('Too many affected transaction documents.', 413);
+            if (info.isDirectory()) { directories.push(entry); for (const child of await readdir(cursor)) await walk(`${entry}/${child}`); }
+            else {
+                if (!info.isFile() || info.nlink !== 1) throw fail('Only regular, unshared files can be moved.');
+                bytes += info.size; if (bytes > this.boardTransactions.limits.stagedBytes / 2) throw fail('Transaction staging budget exceeded.', 413);
+                files.push({ path: entry, data: await readFile(cursor) });
+            }
+        };
+        await walk(relative); return { files, directories };
+    }
     async listFiles() {
+        return this.barrier(async () => {
         const result = [];
+        const referenceState = this.boardReferences ? await this.boardReferences.loadUnlocked() : null;
         const walk = async (directory, prefix = '') => {
             const entries = await readdir(directory, { withFileTypes: true });
             entries.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { numeric: true }));
@@ -97,8 +159,13 @@ export class Vault {
                         await walk(absolute, relative);
                     }
                     else if (entry.isFile() && allowedExtensions.has(path.extname(entry.name).toLowerCase())) {
-                        const kind = /\.md$/i.test(relative) ? 'markdown' : /\.canvas$/i.test(relative) ? 'canvas' : /\.base$/i.test(relative) ? 'base' : 'attachment';
-                        const metadata = kind === 'markdown' && info.size <= maxNoteBytes ? parseMetadata(await readFile(absolute, 'utf8'), relative) : { title: kind === 'canvas' ? entry.name.slice(0, -7) : entry.name, aliases: [], tags: [], links: [] };
+                        const kind = kindForPath(relative);
+                        const metadata = kind === 'markdown' && info.size <= maxNoteBytes ? parseMetadata(await readFile(absolute, 'utf8'), relative) : { title: documentTitle(relative), aliases: [], tags: [], links: [] };
+                        if (kind === 'board' && info.size <= documentLimit(relative)) {
+                            const content = await readFile(absolute, 'utf8'); let board;
+                            try { board = validateBoard(content); } catch (error) { if (error.name !== 'BoardError' && !(error instanceof SyntaxError)) throw error; }
+                            if (board && referenceState && sameContext(board.referenceContext, referenceState)) metadata.links = [...new Set(boardCards(board).map(cardMetadata).filter((card) => card.binding.state === 'bound').map((card) => card.binding.path))].map((target) => ({ target, embed: true, kind: 'wiki' }));
+                        }
                         result.push({ ...metadata, path: relative, kind, mtime: info.mtimeMs, size: info.size });
                     }
                 }
@@ -109,139 +176,142 @@ export class Vault {
             }
         };
         await walk(this.root);
+        // Card bindings are exact Markdown paths. A removed target is not a
+        // graph edge, even if an older board scene has not yet been reviewed.
+        const markdownPaths = new Set(result.filter((entry) => entry.kind === 'markdown').map((entry) => entry.path));
+        for (const entry of result) if (entry.kind === 'board') entry.links = entry.links.filter((link) => markdownPaths.has(link.target));
         return result;
+
+        });
     }
     async list() { return (await this.listFiles()).filter((file) => file.kind === 'markdown'); }
     async read(relative) {
+        return this.barrier(async () => {
         const file = await this.checkedExistingPath(relative);
-        if (!/\.(md|canvas|base)$/i.test(relative))
+        if (!isDocumentPath(relative))
             throw fail("This file is an attachment.");
-        if (file.info.size > maxNoteBytes)
-            throw fail("The document exceeds 2 MB.");
+        if (file.info.size > documentLimit(relative))
+            throw fail(`The document exceeds ${documentLimit(relative) / 1024 ** 2} MB.`);
         const content = await readFile(file.absolute, 'utf8');
+        if (kindForPath(relative) === 'board') validateBoard(content);
         const parsed = /\.md$/i.test(relative) ? parseFrontmatter(content) : { content, data: {} };
-        return { ...parseMetadata(/\.md$/i.test(relative) ? content : '', file.relative), path: file.relative, kind: /\.canvas$/i.test(relative) ? 'canvas' : /\.base$/i.test(relative) ? 'base' : 'markdown', content, body: parsed.content, properties: parsed.data, hash: hash(content), mtime: file.info.mtimeMs, size: file.info.size };
+        return { ...parseMetadata(/\.md$/i.test(relative) ? content : '', file.relative), path: file.relative, kind: kindForPath(relative), content, body: parsed.content, properties: parsed.data, hash: hash(content), mtime: file.info.mtimeMs, size: file.info.size };
+
+        });
     }
     validateContent(relative, content) {
+        this.rejectGenericBoard(relative);
+        if (!isDocumentPath(relative)) throw fail('Use the attachment upload API for this file format.');
         if (typeof content !== 'string' || Buffer.byteLength(content, 'utf8') > maxNoteBytes)
             throw fail("The document must be text of up to 2 MB.");
         if (/\.canvas$/i.test(relative))
             validateCanvas(JSON.parse(content));
         return content;
     }
-    async snapshot(relative, content, reason = 'edit') {
-        const root = await this.internalDirectory('.notesprig/history');
-        const directory = path.join(root, hash(relative));
-        await this.ensureSafeDirectory(directory);
-        const digest = hash(content);
-        const entries = (await readdir(directory)).filter((name) => name.endsWith('.json')).sort();
-        if (entries.length) {
-            const last = JSON.parse(await readFile(path.join(directory, entries.at(-1)), 'utf8'));
-            if (last.hash === digest)
-                return;
-        }
-        const id = `${Date.now()}-${randomUUID()}`;
-        await atomicWrite(path.join(directory, `${id}.json`), JSON.stringify({ id, path: relative, content, hash: digest, createdAt: Date.now(), size: Buffer.byteLength(content), reason }), true);
-        for (const old of entries.slice(0, Math.max(0, entries.length - 99)))
-            await unlink(path.join(directory, old));
-    }
+    snapshot(relative, content, reason = 'edit') { return this.mutate(async () => { this.normalizeRelative(relative); this.protectManaged(relative); this.rejectGenericBoard(relative); const history = await this.historyPlan([{ path: relative, content, reason }]); await this.boardTransactions.run(history); }); }
     create(relative, content) {
         return this.mutate(async () => {
-            const file = this.normalizeRelative(relative);
-            this.validateContent(relative, content);
-            await this.ensureSafeDirectory(path.dirname(file.absolute));
-            await atomicWrite(file.absolute, content, true);
-            await this.snapshot(relative, content, 'create');
+            const file = this.normalizeRelative(relative); this.protectManaged(file.relative); this.validateContent(relative, content);
+            const history = await this.historyPlan([{ path: relative, content, reason: 'create' }]);
+            await this.boardReferences.runChange({ createPaths: /\.md$/i.test(relative) ? [relative] : [] }, () => ({ writes: [{ path: file.relative, content, expectedHash: null }, ...history.writes], deletes: history.deletes }));
             return this.read(relative);
         });
     }
-    update(relative, content, baseHash) {
+    update(relative, content, baseHash, referenceContext) {
         return this.mutate(async () => {
-            this.validateContent(relative, content);
-            const file = await this.checkedExistingPath(relative);
-            const current = await readFile(file.absolute, 'utf8');
-            if (current === content)
-                return { conflict: false, note: await this.read(relative) };
-            if (typeof baseHash !== 'string' || baseHash !== hash(current))
-                return { conflict: true, current: await this.read(relative) };
-            if (current !== content) {
-                await this.snapshot(relative, current);
-                await atomicWrite(file.absolute, content, false);
-                await this.snapshot(relative, content);
-            }
+            this.protectManaged(relative); this.validateContent(relative, content);
+            if (referenceContext !== undefined) await this.boardReferences.assertContext(referenceContext);
+            const file = await this.checkedExistingPath(relative), current = await readFile(file.absolute, 'utf8');
+            if (current === content) return { conflict: false, note: await this.read(relative) };
+            if (typeof baseHash !== 'string' || baseHash !== hash(current)) return { conflict: true, current: await this.read(relative) };
+            const history = await this.historyPlan([{ path: relative, content: current }, { path: relative, content }]);
+            await this.boardTransactions.run({ writes: [{ path: file.relative, content, expectedHash: baseHash }, ...history.writes], deletes: history.deletes });
             return { conflict: false, note: await this.read(relative) };
         });
     }
     async versions(relative) {
+        return this.barrier(async () => {
         this.normalizeRelative(relative);
         const directory = path.join(this.root, '.notesprig/history', hash(relative));
+        if (this.boardTransactions) await this.boardTransactions.inspectDirectory(`.notesprig/history/${hash(relative)}`);
         const names = await readdir(directory).catch((error) => { if (error.code === 'ENOENT')
             return []; throw error; });
         const result = [];
-        for (const name of names.filter((name) => name.endsWith('.json')).sort().reverse()) {
+        for (const name of names.filter((name) => /^[\d]+-[a-f\d-]{36}\.json$/.test(name)).sort().reverse()) {
+            if (this.boardTransactions) await this.boardTransactions.inspect(`.notesprig/history/${hash(relative)}/${name}`);
             const { content, ...metadata } = JSON.parse(await readFile(path.join(directory, name), 'utf8'));
             result.push(metadata);
         }
         return result;
+
+        });
     }
     async version(relative, id) {
+        return this.barrier(async () => {
         this.normalizeRelative(relative);
         if (!/^[\d]+-[a-f\d-]{36}$/.test(id))
             throw fail("Invalid version.");
+        if (this.boardTransactions) await this.boardTransactions.inspect(`.notesprig/history/${hash(relative)}/${id}.json`);
         return JSON.parse(await readFile(path.join(this.root, '.notesprig/history', hash(relative), `${id}.json`), 'utf8'));
+
+        });
     }
     restoreVersion(relative, id, baseHash) {
         return this.mutate(async () => {
-            const version = await this.version(relative, id);
-            const current = await this.read(relative);
-            if (baseHash !== current.hash)
-                return { conflict: true, current };
-            await this.snapshot(relative, current.content, 'before-restore');
-            await atomicWrite(this.normalizeRelative(relative).absolute, version.content, false);
-            await this.snapshot(relative, version.content, 'restore');
+            this.protectManaged(relative); this.rejectGenericBoard(relative);
+            const version = await this.version(relative, id), current = await this.read(relative);
+            if (baseHash !== current.hash) return { conflict: true, current };
+            this.validateContent(relative, version.content);
+            const history = await this.historyPlan([{ path: relative, content: current.content, reason: 'before-restore' }, { path: relative, content: version.content, reason: 'restore' }]);
+            await this.boardReferences.runChange({ replacePaths: /\.md$/i.test(relative) ? [relative] : [] }, () => ({ writes: [{ path: relative, content: version.content, expectedHash: baseHash }, ...history.writes], deletes: history.deletes }));
             return { conflict: false, note: await this.read(relative) };
         });
     }
-    folder(relative) { return this.mutate(async () => { const file = this.normalizeRelative(relative, true); await this.ensureSafeDirectory(file.absolute); return { path: relative }; }); }
+    folder(relative) {
+        return this.mutate(async () => {
+            const file = this.normalizeRelative(relative, true); this.protectManaged(file.relative);
+            await this.boardTransactions.run({ directories: [{ path: file.relative, op: 'create' }] }); return { path: relative };
+        });
+    }
     async upload(relative, base64, overwrite = false) {
         return this.mutate(async () => {
-            const file = this.normalizeRelative(relative);
-            if (typeof base64 !== 'string' || base64.length > Math.ceil(maxFileBytes / 3) * 4 || !/^[A-Za-z\d+/]*={0,2}$/.test(base64))
-                throw fail("Invalid file or file larger than 50 MB.");
-            const buffer = Buffer.from(base64, 'base64');
-            if (buffer.length > maxFileBytes)
-                throw fail("File larger than 50 MB.");
-            if (/\.(md|canvas|base)$/i.test(relative))
-                this.validateContent(relative, buffer.toString('utf8'));
-            await this.ensureSafeDirectory(path.dirname(file.absolute));
-            if (overwrite) {
-                const current = await this.checkedExistingPath(relative).catch((error) => { if (error.status === 404)
-                    return null; throw error; });
-                if (current && /\.(md|canvas|base)$/i.test(relative))
-                    await this.snapshot(relative, await readFile(current.absolute, 'utf8'), 'before-import');
-            }
-            await atomicWrite(file.absolute, buffer, !overwrite);
-            if (/\.(md|canvas|base)$/i.test(relative))
-                await this.snapshot(relative, buffer.toString('utf8'), 'import');
+            const file = this.normalizeRelative(relative); this.protectManaged(file.relative); this.rejectGenericBoard(relative);
+            if (typeof base64 !== 'string' || base64.length > Math.ceil(maxFileBytes / 3) * 4 || !/^[A-Za-z\d+/]*={0,2}$/.test(base64)) throw fail('Invalid file or file larger than 50 MB.');
+            const buffer = Buffer.from(base64, 'base64'); if (buffer.length > maxFileBytes) throw fail('File larger than 50 MB.');
+            if (isDocumentPath(relative)) this.validateContent(relative, buffer.toString('utf8'));
+            const current = await this.boardTransactions.inspect(relative);
+            if (current && !overwrite) throw fail('A file already exists at this path.', 409);
+            const history = isDocumentPath(relative) ? await this.historyPlan([...(current ? [{ path: relative, content: await readFile(file.absolute, 'utf8'), reason: 'before-import' }] : []), { path: relative, content: buffer.toString('utf8'), reason: 'import' }]) : { writes: [], deletes: [] };
+            const change = /\.md$/i.test(relative) ? current ? { replacePaths: [relative] } : { createPaths: [relative] } : {};
+            await this.boardReferences.runChange(change, () => ({ writes: [{ path: relative, content: buffer, expectedHash: current?.hash ?? null }, ...history.writes], deletes: history.deletes }));
             return { path: relative, size: buffer.length };
         });
     }
     trash(relative) {
         return this.mutate(async () => {
-            const file = await this.checkedExistingPath(relative, true);
-            const id = `${Date.now()}-${randomUUID()}`;
-            const directory = await this.internalDirectory(`.trash/${id}`);
-            await atomicWrite(path.join(directory, 'metadata.json'), JSON.stringify({ id, path: relative, trashedAt: Date.now(), kind: file.info.isDirectory() ? 'folder' : /\.canvas$/i.test(relative) ? 'canvas' : /\.md$/i.test(relative) ? 'markdown' : 'attachment', size: file.info.size }), true);
-            await rename(file.absolute, path.join(directory, 'content'));
-            return { path: relative, id, trashedAt: Date.now() };
+            this.protectManaged(relative, true); const file = await this.checkedExistingPath(relative, true), tree = await this.collectTree(relative);
+            const id = `${Date.now()}-${randomUUID()}`, directory = `.trash/${id}`, destination = `${directory}/content`;
+            const kind = file.info.isDirectory() ? 'folder' : kindForPath(relative);
+            const metadata = { id, path: relative, trashedAt: Date.now(), kind, size: file.info.size };
+            for (const entry of tree.files.filter((entry) => kindForPath(entry.path) === 'board')) validateBoard(entry.data.toString('utf8'));
+            const history = await this.historyPlan(tree.files.filter((entry) => isDocumentPath(entry.path)).map((entry) => ({ path: entry.path, content: entry.data.toString('utf8'), reason: 'before-delete' })));
+            const moved = tree.files.map((entry) => ({ path: destination + entry.path.slice(relative.length), content: entry.data, expectedHash: null }));
+            await this.boardReferences.runChange({ deletePaths: tree.files.filter((entry) => /\.md$/i.test(entry.path)).map((entry) => entry.path) }, () => ({ writes: [{ path: `${directory}/metadata.json`, content: JSON.stringify(metadata), expectedHash: null }, ...moved, ...history.writes], deletes: [...tree.files.map((entry) => ({ path: entry.path, expectedHash: hash(entry.data) })), ...history.deletes], directories: [...tree.directories.map((entry) => ({ path: destination + entry.slice(relative.length), op: 'create' })), ...tree.directories.map((entry) => ({ path: entry, op: 'remove', expectedExists: true }))] }));
+            return { path: relative, id, trashedAt: metadata.trashedAt };
         });
     }
     async trashList() {
+        return this.barrier(async () => {
         const root = await this.internalDirectory('.trash');
         const result = [];
         for (const entry of await readdir(root, { withFileTypes: true }))
             if (entry.isDirectory() && /^[\d]+-[a-f\d-]{36}$/.test(entry.name)) {
                 try {
+                    await this.boardTransactions.inspect(`.trash/${entry.name}/metadata.json`);
+                    // Both file and directory content entries are accepted,
+                    // but symbolic links in trash must never be followed.
+                    const contentInfo = await lstat(path.join(root, entry.name, 'content'));
+                    if (contentInfo.isSymbolicLink()) continue;
                     const metadata = JSON.parse(await readFile(path.join(root, entry.name, 'metadata.json'), 'utf8'));
                     await lstat(path.join(root, entry.name, 'content'));
                     result.push(metadata);
@@ -249,31 +319,39 @@ export class Vault {
                 catch { /* Interrupted empty trash entry. */ }
             }
         return result.sort((a, b) => b.trashedAt - a.trashedAt);
+
+        });
     }
     restoreTrash(id, destination) {
         return this.mutate(async () => {
-            if (!/^[\d]+-[a-f\d-]{36}$/.test(id))
-                throw fail("Invalid trash entry.");
-            const directory = path.join(this.root, '.trash', id);
-            const metadata = JSON.parse(await readFile(path.join(directory, 'metadata.json'), 'utf8'));
-            const target = this.normalizeRelative(destination || metadata.path, metadata.kind === 'folder');
-            await this.ensureSafeDirectory(path.dirname(target.absolute));
-            if (await lstat(target.absolute).then(() => true, (error) => { if (error.code === 'ENOENT')
-                return false; throw error; }))
-                throw fail("A file already exists at the target. Choose another path.", 409);
-            await rename(path.join(directory, 'content'), target.absolute);
-            await unlink(path.join(directory, 'metadata.json'));
-            await rmdir(directory);
+            if (!/^[\d]+-[a-f\d-]{36}$/.test(id)) throw fail('Invalid trash entry.');
+            const directory = `.trash/${id}`, metadataPath = `${directory}/metadata.json`;
+            const metadataFile = await this.boardTransactions.inspect(metadataPath); if (!metadataFile) throw fail('Trash entry not found.', 404);
+            const metadata = JSON.parse(await readFile(metadataFile.absolute, 'utf8'));
+            const target = this.normalizeRelative(destination || metadata.path, metadata.kind === 'folder'); this.protectManaged(target.relative, true);
+            if (await lstat(target.absolute).then(() => true, (error) => { if (error.code === 'ENOENT') return false; throw error; })) throw fail('A file already exists at the target. Choose another path.', 409);
+            const source = `${directory}/content`, tree = await this.collectTree(source);
+            const writes = tree.files.map((entry) => {
+                const relative = target.relative + entry.path.slice(source.length); this.normalizeRelative(relative); this.protectManaged(relative);
+                if (kindForPath(relative) === 'board') validateBoard(entry.data.toString('utf8'));
+                return { path: relative, content: entry.data, expectedHash: null };
+            });
+            const directories = [...tree.directories.map((entry) => ({ path: target.relative + entry.slice(source.length), op: 'create' })), ...tree.directories.map((entry) => ({ path: entry, op: 'remove', expectedExists: true })), { path: directory, op: 'remove', expectedExists: true }];
+            await this.boardReferences.runChange({ createPaths: writes.filter((entry) => /\.md$/i.test(entry.path)).map((entry) => entry.path) }, () => ({ writes, deletes: [{ path: metadataPath, expectedHash: metadataFile.hash }, ...tree.files.map((entry) => ({ path: entry.path, expectedHash: hash(entry.data) }))], directories }));
             return { path: target.relative, kind: metadata.kind };
         });
     }
     async attachment(relative) {
+        return this.barrier(async () => {
         const file = await this.checkedExistingPath(relative);
         if (file.info.size > maxFileBytes)
             throw fail("File larger than 50 MB.");
         return { absolute: file.absolute, type: mimeTypes[path.extname(relative).toLowerCase()] || 'application/octet-stream', size: file.info.size, name: path.basename(relative), preview: Boolean(mimeTypes[path.extname(relative).toLowerCase()]) };
+
+        });
     }
     async exportArchive() {
+        return this.barrier(async () => {
         const entries = {};
         let size = 0;
         for (const file of await this.listFiles())
@@ -284,8 +362,11 @@ export class Vault {
                 entries[file.path] = new Uint8Array(await readFile((await this.checkedExistingPath(file.path)).absolute));
             }
         return Buffer.from(zipSync(entries, { level: 6 }));
+
+        });
     }
     async settings(value) {
+        return this.barrier(async () => {
         const file = path.join(this.root, '.notesprig', 'settings.json');
         if (value === undefined)
             return readFile(file, 'utf8').then(JSON.parse, (error) => { if (error.code === 'ENOENT')
@@ -293,6 +374,8 @@ export class Vault {
         if (!value || typeof value !== 'object' || Array.isArray(value) || JSON.stringify(value).length > 128 * 1024)
             throw fail("Invalid configuration.");
         return this.mutate(async () => { await atomicWrite(file, JSON.stringify(value, null, 2), false); return value; });
+
+        });
     }
     async importArchive(base64, overwrite = false) {
         if (typeof base64 !== 'string' || base64.length > 100 * 1024 * 1024)
@@ -304,6 +387,7 @@ export class Vault {
                     return false;
                 try {
                     this.normalizeRelative(file.name);
+                    if (kindForPath(file.name) === 'board' || isManagedPath(file.name)) { skipped.push(file.name); return false; }
                 }
                 catch {
                     skipped.push(file.name);
@@ -357,158 +441,62 @@ export class Vault {
     }
     merge(sourcePath, targetPath, sourceHash, targetHash, prepend = false) {
         return this.mutate(async () => {
-            if (sourcePath === targetPath || !/\.md$/i.test(sourcePath) || !/\.md$/i.test(targetPath))
-                throw fail("Choose two different Markdown notes.");
+            if (sourcePath === targetPath || !/\.md$/i.test(sourcePath) || !/\.md$/i.test(targetPath)) throw fail('Choose two different Markdown notes.');
+            this.protectManaged(sourcePath); this.protectManaged(targetPath);
             const source = await this.read(sourcePath), target = await this.read(targetPath);
-            if (source.hash !== sourceHash || target.hash !== targetHash)
-                throw fail("One of the notes changed. Refresh the preview before merging.", 409);
-            const all = (await this.listFiles()).filter((file) => file.kind !== 'folder');
-            const mapping = new Map([[sourcePath, targetPath]]);
+            if (source.hash !== sourceHash || target.hash !== targetHash) throw fail('One of the notes changed. Refresh the preview before merging.', 409);
+            const all = (await this.listFiles()).filter((file) => file.kind !== 'folder'), mapping = new Map([[sourcePath, targetPath]]);
             const properties = { ...source.properties, ...target.properties };
-            for (const key of ['tags', 'aliases']) {
-                const values = [...new Set([...toStringList(source.properties[key]), ...toStringList(target.properties[key])])];
-                if (values.length)
-                    properties[key] = values;
-            }
+            for (const key of ['tags', 'aliases']) { const values = [...new Set([...toStringList(source.properties[key]), ...toStringList(target.properties[key])])]; if (values.length) properties[key] = values; }
             const sourceBody = rewriteLinks(source.body, sourcePath, targetPath, all, mapping).trim();
             const bodies = prepend ? [sourceBody, target.body.trim()] : [target.body.trim(), sourceBody];
-            const merged = `${Object.keys(properties).length ? `---\n${yamlStringify(properties)}---\n` : ''}${bodies.filter(Boolean).join('\n\n')}\n`;
-            this.validateContent(targetPath, merged);
-            const originals = new Map([[sourcePath, Buffer.from(source.content)], [targetPath, Buffer.from(target.content)]]);
-            const writes = new Map();
-            const updated = [];
+            const merged = `${Object.keys(properties).length ? `---\n${yamlStringify(properties)}---\n` : ''}${bodies.filter(Boolean).join('\n\n')}\n`; this.validateContent(targetPath, merged);
+            const writes = [], updated = [], historyRequests = [{ path: sourcePath, content: source.content, reason: 'before-merge' }];
             for (const file of all.filter((file) => (file.kind === 'markdown' || file.kind === 'canvas') && file.path !== sourcePath)) {
-                const original = file.path === targetPath ? target.content : await readFile((await this.checkedExistingPath(file.path)).absolute, 'utf8');
-                let next = file.path === targetPath ? merged : original;
-                if (file.kind === 'canvas') {
-                    const document = JSON.parse(next);
-                    let changed = false;
-                    for (const node of document.nodes || [])
-                        if (node.file === sourcePath) {
-                            node.file = targetPath;
-                            changed = true;
-                        }
-                    if (changed)
-                        next = JSON.stringify(document, null, '\t');
-                }
-                else
-                    next = rewriteLinks(next, file.path, file.path, all, mapping);
-                if (next !== original) {
-                    originals.set(file.path, Buffer.from(original));
-                    writes.set(file.path, Buffer.from(next));
-                    updated.push(file.path);
-                }
+                const original = file.path === targetPath ? target.content : await readFile((await this.checkedExistingPath(file.path)).absolute, 'utf8'); let next = file.path === targetPath ? merged : original;
+                if (file.kind === 'canvas') { const document = JSON.parse(next); let changed = false; for (const node of document.nodes || []) for (const key of ['file', 'background']) if (node[key] === sourcePath) { node[key] = targetPath; changed = true; } if (changed) next = JSON.stringify(document, null, '\t'); }
+                else next = rewriteLinks(next, file.path, file.path, all, mapping);
+                if (next !== original) { this.validateContent(file.path, next); historyRequests.push({ path: file.path, content: original, reason: 'before-merge' }, { path: file.path, content: next, reason: 'merge' }); writes.push({ path: file.path, content: next, expectedHash: hash(original) }); updated.push(file.path); }
             }
-            const journal = path.join(this.root, '.notesprig', 'transaction.json');
-            await atomicWrite(journal, JSON.stringify({ originals: [...originals].map(([path, buffer]) => ({ path, base64: buffer.toString('base64') })), created: [] }), false);
-            try {
-                for (const [path, data] of originals)
-                    await this.snapshot(path, data.toString('utf8'), 'before-merge');
-                for (const [relative, data] of writes)
-                    await atomicWrite(this.normalizeRelative(relative).absolute, data, false);
-                const id = `${Date.now()}-${randomUUID()}`, trash = await this.internalDirectory(`.trash/${id}`);
-                await atomicWrite(path.join(trash, 'metadata.json'), JSON.stringify({ id, path: sourcePath, trashedAt: Date.now(), kind: 'markdown', size: Buffer.byteLength(source.content) }), true);
-                await rename(this.normalizeRelative(sourcePath).absolute, path.join(trash, 'content'));
-                const result = await this.read(targetPath);
-                await this.snapshot(targetPath, result.content, 'merge');
-                await unlink(journal);
-                return { note: result, updated };
-            }
-            catch (error) {
-                await this.recoverTransaction();
-                throw error;
-            }
+            const id = `${Date.now()}-${randomUUID()}`, directory = `.trash/${id}`, history = await this.historyPlan(historyRequests);
+            await this.boardReferences.runChange({ deletePaths: [sourcePath], replacePaths: [targetPath] }, () => ({ writes: [...writes, ...history.writes, { path: `${directory}/metadata.json`, content: JSON.stringify({ id, path: sourcePath, trashedAt: Date.now(), kind: 'markdown', size: Buffer.byteLength(source.content) }), expectedHash: null }, { path: `${directory}/content`, content: source.content, expectedHash: null }], deletes: [{ path: sourcePath, expectedHash: sourceHash }, ...history.deletes] }));
+            return { note: await this.read(targetPath), updated };
         });
     }
     rename(oldRelative, newRelative, updateLinks = true) {
         return this.mutate(async () => {
-            const source = await this.checkedExistingPath(oldRelative, true);
-            const target = this.normalizeRelative(newRelative, source.info.isDirectory());
-            if (source.relative === target.relative)
-                return { path: source.relative, updated: [] };
-            if (target.relative.startsWith(`${source.relative}/`))
-                throw fail("A folder cannot be moved inside itself.");
-            if (source.info.isFile() && /\.(md|canvas|base)$/i.test(source.relative) && path.extname(source.relative).toLowerCase() !== path.extname(target.relative).toLowerCase())
-                throw fail("Keep the document extension when renaming.");
-            await this.ensureSafeDirectory(path.dirname(target.absolute));
-            if (await lstat(target.absolute).then(() => true, (error) => { if (error.code === 'ENOENT')
-                return false; throw error; }))
-                throw fail("A file or folder already exists at the target.", 409);
-            const all = await this.listFiles();
-            const moves = all.filter((file) => file.kind !== 'folder' && (file.path === source.relative || file.path.startsWith(`${source.relative}/`)));
-            const mapping = new Map(moves.map((file) => [file.path, target.relative + file.path.slice(source.relative.length)]));
-            const originalData = new Map();
-            const writes = new Map();
-            const updated = [];
-            for (const file of moves) {
-                const destination = this.normalizeRelative(mapping.get(file.path));
-                if (!source.info.isDirectory())
-                    await this.ensureSafeDirectory(path.dirname(destination.absolute));
-                if (await lstat(destination.absolute).then(() => true, (error) => { if (error.code === 'ENOENT')
-                    return false; throw error; }))
-                    throw fail("A file already exists at the target.", 409);
-                const data = await readFile((await this.checkedExistingPath(file.path)).absolute);
-                originalData.set(file.path, data);
-                writes.set(destination.relative, data);
+            this.protectManaged(oldRelative, true); this.protectManaged(newRelative, true);
+            const source = await this.checkedExistingPath(oldRelative, true), target = this.normalizeRelative(newRelative, source.info.isDirectory());
+            if (source.relative === target.relative) return { path: source.relative, updated: [] };
+            if (target.relative.startsWith(`${source.relative}/`)) throw fail('A folder cannot be moved inside itself.');
+            if (source.info.isFile() && (isDocumentPath(source.relative) || isDocumentPath(target.relative)) && path.extname(source.relative).toLowerCase() !== path.extname(target.relative).toLowerCase()) throw fail('Keep the document extension when renaming.');
+            if (await lstat(target.absolute).then(() => true, (error) => { if (error.code === 'ENOENT') return false; throw error; })) throw fail('A file or folder already exists at the target.', 409);
+            const tree = await this.collectTree(source.relative), all = await this.listFiles();
+            const mapping = new Map(tree.files.map((entry) => [entry.path, target.relative + entry.path.slice(source.relative.length)]));
+            const originalData = new Map(tree.files.map((entry) => [entry.path, entry.data])), writes = new Map(), updated = [], historyRequests = [];
+            for (const [from, to] of mapping) { this.normalizeRelative(to); this.protectManaged(to); writes.set(to, originalData.get(from)); }
+            if (updateLinks) for (const file of all.filter((file) => file.kind === 'markdown' || file.kind === 'canvas')) {
+                const data = originalData.get(file.path) || await readFile((await this.checkedExistingPath(file.path)).absolute), content = data.toString('utf8'), nextPath = mapping.get(file.path) || file.path; let next = content;
+                if (file.kind === 'canvas') { const document = JSON.parse(content); let changed = false; for (const node of document.nodes || []) for (const key of ['file', 'background']) if (mapping.has(node[key])) { node[key] = mapping.get(node[key]); changed = true; } if (changed) next = JSON.stringify(document, null, '\t'); }
+                else next = rewriteLinks(content, file.path, nextPath, all.filter((entry) => entry.kind !== 'folder'), mapping);
+                if (next !== content) { this.validateContent(file.path, next); originalData.set(file.path, data); writes.set(nextPath, Buffer.from(next)); updated.push(nextPath); }
             }
-            if (updateLinks)
-                for (const file of all.filter((file) => file.kind === 'markdown' || file.kind === 'canvas')) {
-                    const data = originalData.get(file.path) || await readFile((await this.checkedExistingPath(file.path)).absolute);
-                    const content = data.toString('utf8');
-                    const nextPath = mapping.get(file.path) || file.path;
-                    let next = content;
-                    if (file.kind === 'canvas') {
-                        const document = JSON.parse(content);
-                        let changed = false;
-                        for (const node of document.nodes || [])
-                            for (const key of ['file', 'background'])
-                                if (mapping.has(node[key])) {
-                                    node[key] = mapping.get(node[key]);
-                                    changed = true;
-                                }
-                        if (changed)
-                            next = JSON.stringify(document, null, '\t');
-                    }
-                    else
-                        next = rewriteLinks(content, file.path, nextPath, all.filter((entry) => entry.kind !== 'folder'), mapping);
-                    if (next !== content) {
-                        originalData.set(file.path, data);
-                        writes.set(nextPath, Buffer.from(next));
-                        updated.push(nextPath);
-                    }
-                }
-            const journal = path.join(this.root, '.notesprig', 'transaction.json');
-            await atomicWrite(journal, JSON.stringify({ originals: [...originalData].map(([relative, data]) => ({ path: relative, base64: data.toString('base64') })), created: [...mapping.values()], ...(source.info.isDirectory() ? { directoryMove: { from: source.relative, to: target.relative } } : {}) }), false);
-            try {
-                for (const [relative, data] of originalData)
-                    if (/\.(md|canvas|base)$/i.test(relative))
-                        await this.snapshot(relative, data.toString('utf8'), 'before-rename');
-                if (source.info.isDirectory())
-                    await rename(source.absolute, target.absolute);
-                const destinations = new Set(mapping.values());
-                for (const [relative, data] of writes) {
-                    const file = this.normalizeRelative(relative);
-                    await this.ensureSafeDirectory(path.dirname(file.absolute));
-                    await atomicWrite(file.absolute, data, !originalData.has(relative) && !(source.info.isDirectory() && destinations.has(relative)));
-                }
-                if (!source.info.isDirectory())
-                    for (const relative of mapping.keys())
-                        await unlink(this.normalizeRelative(relative).absolute);
-                for (const [from, to] of mapping)
-                    if (/\.(md|canvas|base)$/i.test(from)) {
-                        const directory = await this.internalDirectory(`.notesprig/history/${hash(to)}`);
-                        for (const version of await this.versions(from)) {
-                            const original = await this.version(from, version.id);
-                            await atomicWrite(path.join(directory, `${version.id}.json`), JSON.stringify({ ...original, path: to }), false);
-                        }
-                    }
-                await unlink(journal);
-                return { path: target.relative, updated, moved: Object.fromEntries(mapping) };
+            for (const [relative, data] of originalData) if (isDocumentPath(relative)) { if (kindForPath(relative) === 'board') validateBoard(data.toString('utf8')); historyRequests.push({ path: relative, content: data.toString('utf8'), reason: 'before-rename' }); }
+            const history = await this.historyPlan(historyRequests), historyCopies = [];
+            const copyHistory = async (to, original) => {
+                const relative = `.notesprig/history/${hash(to)}/${original.id}.json`, content = JSON.stringify({ ...original, path: to });
+                const existing = await this.boardTransactions.inspect(relative);
+                if (existing && existing.hash !== hash(content)) throw fail('A historical version at the destination differs. Choose another path.', 409);
+                if (!existing) historyCopies.push({ path: relative, content, expectedHash: null });
+            };
+            for (const [from, to] of mapping) if (isDocumentPath(from)) {
+                for (const version of await this.versions(from)) await copyHistory(to, await this.version(from, version.id));
+                for (const entry of history.writes.filter((entry) => entry.path.startsWith(`.notesprig/history/${hash(from)}/`))) await copyHistory(to, JSON.parse(entry.content));
             }
-            catch (error) {
-                await this.recoverTransaction();
-                throw error;
-            }
+            const stagedWrites = [...writes].map(([relative, data]) => ({ path: relative, content: data, expectedHash: mapping.has(relative) ? null : originalData.has(relative) ? hash(originalData.get(relative)) : null }));
+            const directories = [...tree.directories.map((entry) => ({ path: target.relative + entry.slice(source.relative.length), op: 'create' })), ...tree.directories.map((entry) => ({ path: entry, op: 'remove', expectedExists: true }))];
+            await this.boardReferences.runChange({ renamePaths: [...mapping].filter(([from]) => /\.md$/i.test(from)).map(([from, to]) => ({ from, to })) }, () => ({ writes: [...stagedWrites, ...history.writes, ...historyCopies], deletes: [...tree.files.map((entry) => ({ path: entry.path, expectedHash: hash(entry.data) })), ...history.deletes], directories }));
+            return { path: target.relative, updated, moved: Object.fromEntries(mapping) };
         });
     }
 }

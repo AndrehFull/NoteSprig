@@ -1,10 +1,11 @@
 import { createReadStream, readFileSync } from 'node:fs';
-import { realpath, stat } from 'node:fs/promises';
+import { open, realpath, stat } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createAuth } from './auth.mjs';
 import { Vault } from './vault.mjs';
+import { Boards } from './boards.mjs';
 import { environment, legacy } from './legacy.mjs';
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const branding = JSON.parse(readFileSync(path.join(projectRoot, 'branding.json'), 'utf8'));
@@ -28,6 +29,7 @@ if (production && !['127.0.0.1', '::1', 'localhost'].includes(host) && !trustPro
 if (!Number.isInteger(port) || port < 1 || port > 65535)
     throw new Error("Invalid PORT.");
 await vault.initialize();
+const boards = new Boards(vault);
 const mimeTypes = {
     '.css': 'text/css; charset=utf-8', '.html': 'text/html; charset=utf-8', '.ico': 'image/x-icon',
     '.js': 'text/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8',
@@ -161,6 +163,7 @@ async function serveStatic(req, res, url) {
             throw new Error('not-file');
     }
     catch {
+        if (/^\/(assets|board-assets|_notesprig)\//.test(requested)) return json(res, 404, { error: 'Static asset unavailable. Save your work before updating the app.' });
         absolute = path.join(distReal, 'index.html');
         info = await stat(absolute);
     }
@@ -174,34 +177,23 @@ async function serveStatic(req, res, url) {
     });
     createReadStream(absolute).pipe(res);
 }
-const server = createServer(async (req, res) => {
-    try {
-        const url = new URL(req.url || '/', requestOrigin(req));
-        if (url.pathname.startsWith('/api/')) {
-            if (req.method === 'POST' || req.method === 'PUT' || req.method === 'DELETE') {
-                if (!checkOrigin(req, res))
-                    return;
-                if (!(req.headers['content-type'] || '').startsWith('application/json')) {
-                    return json(res, 415, { error: "Use a JSON request." });
-                }
-            }
-            if (req.method === 'GET' && url.pathname === '/api/session') {
-                return json(res, 200, { authenticated: authenticated(req) });
-            }
-            if (req.method === 'POST' && url.pathname === '/api/login') {
-                if (!checkRateLimit(req, res))
-                    return;
-                const body = await readJson(req, 16 * 1024);
-                if (!(await auth.verifyPassword(body.password)))
-                    return json(res, 401, { error: "Incorrect password." });
-                attempts.delete(req.socket.remoteAddress || 'unknown');
-                return json(res, 200, { authenticated: true }, { 'Set-Cookie': `notesprig_session=${encodeURIComponent(auth.createCookie())}; ${cookieOptions(req)}` });
-            }
-            if (req.method === 'POST' && url.pathname === '/api/logout') {
-                return json(res, 200, { authenticated: false }, { 'Set-Cookie': ['notesprig_session', legacy.sessionCookie].map((name) => `${name}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0${production ? '; Secure' : ''}`) });
-            }
-            if (!authenticated(req))
-                return json(res, 401, { error: "Authentication required." });
+async function privateRoutes(req,res,url) {
+            if (req.method === 'GET' && url.pathname === '/api/boards/context')
+                return json(res, 200, await boards.context());
+            if (url.pathname === '/api/boards' && req.method === 'GET')
+                return json(res, 200, await boards.read(url.searchParams.get('path') || '', JSON.parse(url.searchParams.get('context') || 'null')));
+            if (url.pathname === '/api/boards' && ['POST', 'PUT'].includes(req.method))
+                return json(res, req.method === 'POST' ? 201 : 200, await boards.save({ ...await readJson(req), create: req.method === 'POST' }));
+            if (url.pathname === '/api/boards/assets' && req.method === 'POST')
+                return json(res, 201, await boards.assetUpload(await readJson(req)));
+            if (url.pathname === '/api/boards/asset' && req.method === 'GET')
+                return json(res, 200, await boards.asset({ sha256: url.searchParams.get('sha256'), mimeType: url.searchParams.get('mimeType'), context: JSON.parse(url.searchParams.get('context') || 'null') }));
+            if (url.pathname === '/api/boards/preview' && req.method === 'POST')
+                return json(res, 200, await boards.preview(await readJson(req)));
+            if (url.pathname === '/api/boards/restore' && req.method === 'POST')
+                return json(res, 200, await boards.restore(await readJson(req)));
+            if (url.pathname === '/api/boards/review' && req.method === 'POST')
+                return json(res, 200, await boards.review(await readJson(req)));
             if (req.method === 'GET' && url.pathname === '/api/notes') {
                 return json(res, 200, await vault.list());
             }
@@ -245,15 +237,19 @@ const server = createServer(async (req, res) => {
             }
             if (req.method === 'GET' && url.pathname === '/api/note') {
                 const relative = url.searchParams.get('path') || '';
-                return json(res, 200, await vault.read(relative));
+                const referenceContext = url.searchParams.get('referenceContext');
+                const note = referenceContext ? await vault.boardReferences.readGuarded(JSON.parse(referenceContext), () => vault.read(relative)) : await vault.read(relative);
+                return json(res, 200, note);
             }
             if (req.method === 'POST' && url.pathname === '/api/note') {
                 const body = await readJson(req);
-                return json(res, 201, await vault.create(body.path, body.content));
+                const create=()=>vault.create(body.path,body.content);
+                return json(res, 201, body.workspaceContext ? await vault.boardReferences.readGuarded(body.workspaceContext,create,{referenceEpoch:false}) : await create());
             }
             if (req.method === 'PUT' && url.pathname === '/api/note') {
                 const body = await readJson(req);
-                const result = await vault.update(body.path, body.content, body.baseHash);
+                const update=()=>vault.update(body.path, body.content, body.baseHash, body.referenceContext);
+                const result = body.workspaceContext ? await vault.boardReferences.readGuarded(body.workspaceContext, update, {referenceEpoch:false}) : await update();
                 if (result.conflict)
                     return json(res, 409, { error: "The note changed elsewhere.", current: result.current });
                 return json(res, 200, result.note);
@@ -271,7 +267,10 @@ const server = createServer(async (req, res) => {
                 return json(res, 200, await vault.trash(relative));
             }
             if ((req.method === 'GET' || req.method === 'HEAD') && (url.pathname === '/api/attachment' || url.pathname === '/api/download')) {
-                const attachment = await vault.attachment(url.searchParams.get('path') || '');
+                const acquire=()=>vault.barrier(async () => { const metadata=await vault.attachment(url.searchParams.get('path') || '');const handle=await open(metadata.absolute,'r');return {...metadata,handle}; });
+                const identity=url.searchParams.get('context');
+                const attachment = identity ? await vault.boardReferences.readGuarded(JSON.parse(identity),acquire,{referenceEpoch:false}) : await acquire();
+                res.on('close',()=>{void attachment.handle.close().catch(()=>{});});
                 const attachmentHeaders = {
                     'Cache-Control': 'private, max-age=60',
                     'Content-Length': attachment.size,
@@ -294,12 +293,12 @@ const server = createServer(async (req, res) => {
                     res.writeHead(206, { ...attachmentHeaders, 'Content-Length': end - start + 1, 'Content-Range': `bytes ${start}-${end}/${attachment.size}` });
                     if (req.method === 'HEAD')
                         return res.end();
-                    return createReadStream(attachment.absolute, { start, end }).on('error', () => res.destroy()).pipe(res);
+                    return attachment.handle.createReadStream({ start, end }).on('error', () => res.destroy()).pipe(res);
                 }
                 res.writeHead(200, attachmentHeaders);
                 if (req.method === 'HEAD')
                     return res.end();
-                return createReadStream(attachment.absolute).on('error', () => res.destroy()).pipe(res);
+                return attachment.handle.createReadStream().on('error', () => res.destroy()).pipe(res);
             }
             if (req.method === 'GET' && url.pathname === '/api/search') {
                 const query = (url.searchParams.get('q') || '').trim().slice(0, 120);
@@ -324,6 +323,37 @@ const server = createServer(async (req, res) => {
                 return json(res, 200, { total: items.reduce((sum, item) => sum + item.count, 0), items });
             }
             return json(res, 404, { error: "Endpoint not found." });
+}
+const server = createServer(async (req, res) => {
+    try {
+        const url = new URL(req.url || '/', requestOrigin(req));
+        if (url.pathname.startsWith('/api/')) {
+            if (req.method === 'POST' || req.method === 'PUT' || req.method === 'DELETE') {
+                if (!checkOrigin(req, res))
+                    return;
+                if (!(req.headers['content-type'] || '').startsWith('application/json')) {
+                    return json(res, 415, { error: "Use a JSON request." });
+                }
+            }
+            if (req.method === 'GET' && url.pathname === '/api/session') {
+                return json(res, 200, { authenticated: authenticated(req) });
+            }
+            if (req.method === 'POST' && url.pathname === '/api/login') {
+                if (!checkRateLimit(req, res))
+                    return;
+                const body = await readJson(req, 16 * 1024);
+                if (!(await auth.verifyPassword(body.password)))
+                    return json(res, 401, { error: "Incorrect password." });
+                attempts.delete(req.socket.remoteAddress || 'unknown');
+                return json(res, 200, { authenticated: true }, { 'Set-Cookie': `notesprig_session=${encodeURIComponent(auth.createCookie())}; ${cookieOptions(req)}` });
+            }
+            if (req.method === 'POST' && url.pathname === '/api/logout') {
+                return json(res, 200, { authenticated: false }, { 'Set-Cookie': ['notesprig_session', legacy.sessionCookie].map((name) => `${name}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0${production ? '; Secure' : ''}`) });
+            }
+            if (!authenticated(req))
+                return json(res, 401, { error: "Authentication required." });
+            const capturedContext=req.headers['x-notesprig-context'];
+            return capturedContext ? await vault.boardReferences.readGuarded(JSON.parse(capturedContext), () => privateRoutes(req,res,url), {referenceEpoch:false}) : await privateRoutes(req,res,url);
         }
         if (req.method !== 'GET' && req.method !== 'HEAD')
             return json(res, 405, { error: "Method not allowed." });
@@ -331,7 +361,7 @@ const server = createServer(async (req, res) => {
     }
     catch (error) {
         const status = Number.isInteger(error.status) ? error.status : 400;
-        return json(res, status, { error: error.message || "Could not process the request." });
+        return json(res, status, { error: error.message || "Could not process the request.", ...(error.code ? { code: error.code } : {}), ...(error.detail || {}) });
     }
 });
 server.listen(port, host, () => {

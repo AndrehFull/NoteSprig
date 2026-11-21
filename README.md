@@ -28,12 +28,13 @@ NoteSprig brings Markdown notes, a knowledge graph, visual canvases, and structu
 - **Connected notes:** wikilinks, relative Markdown links, aliases, backlinks, heading and block references, tags, and search.
 - **Markdown editing:** source mode, live preview, and reading mode, with properties, tasks, tables, callouts, syntax highlighting, math, and Mermaid diagrams.
 - **Visual thinking:** global and local graphs with filters and force controls; canvases with cards, groups, and connections.
+- **Experimental visual boards:** opt-in Excalidraw drawing with live note excerpts, immutable images, scoped offline drafts, and private recovery. See the [visual board guide](docs/visual-boards.md).
 - **Structured views:** YAML-based tables, lists, cards, and Kanban boards with filters and formulas.
 - **A flexible workspace:** folders, bookmarks, pinned tabs, split panes, templates, and daily notes.
 - **Recovery and portability:** file history, trash, conflict handling, folder and ZIP import/export, and encrypted backups.
 - **Access across devices:** responsive layout, installable PWA, and local drafts for offline editing after an initial connected session.
 
-Your vault uses Markdown, JSON Canvas, YAML Bases, and regular attachment files. There is no external database to provision.
+Your vault uses Markdown, JSON Canvas, YAML Bases, versioned visual boards, and regular attachment files. There is no external database to provision.
 
 <details>
 <summary>More screenshots</summary>
@@ -135,6 +136,8 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow and [SECURI
 | [Architecture](docs/architecture.md) | Frontend, API, file storage, and offline model |
 | [Migration](docs/migration.md) | Compatibility with earlier development installations |
 | [Languages and translation](docs/i18n.md) | Language preferences and translation workflow |
+| [Visual boards](docs/visual-boards.md) | Opt-in Excalidraw integration, references, portability, and recovery |
+| [Unified Canvas design](docs/design/unified-canvas.md) | Architecture and required release gates |
 | [Roadmap](docs/roadmap.md) | Current priorities and planned features |
 | [Changelog](CHANGELOG.md) | Changes prepared for release |
 | [Release preparation](docs/releasing.md) | Maintainer checks before public distribution |

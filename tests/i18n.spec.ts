@@ -39,6 +39,8 @@ test('switching language offline preserves note contents, editor undo, and the s
   const original = '# Hello / Olá\n\nEnglish and português remain unchanged.\n';
   await page.request.post('/api/login', { data: { password: 'test-session-only' } });
   expect((await page.request.post('/api/note', { data: { path: file, content: original } })).ok()).toBe(true);
+  const identity=await(await page.request.get('/api/boards/context')).json();
+  const cacheKey=`workspace:${identity.vaultId}:${identity.restoreGeneration}:doc:${file}`;
   try {
     await page.goto('/');
     await page.getByRole('button', { name: 'Mixed', exact: true }).click();
@@ -59,10 +61,10 @@ test('switching language offline preserves note contents, editor undo, and the s
     await expect(editor).not.toContainText('Unsent multilingual draft');
     await expect(editor).toContainText('English and português remain unchanged.');
     await page.keyboard.press('Control+End'); await page.keyboard.insertText('\nRecovered offline / recuperado.');
-    await expect.poll(() => page.evaluate(async (file) => new Promise<boolean>((resolve) => {
+    await expect.poll(() => page.evaluate(async (cacheKey) => new Promise<boolean>((resolve) => {
       const open = indexedDB.open('notesprig-private');
-      open.onsuccess = () => { const db = open.result, request = db.transaction('state').objectStore('state').get(`doc:${file}`); request.onsuccess = () => { db.close(); resolve(Boolean(request.result?.dirty && request.result.content.includes('Recovered offline'))); }; };
-    }), file)).toBe(true);
+      open.onsuccess = () => { const db = open.result, request = db.transaction('state').objectStore('state').get(cacheKey); request.onsuccess = () => { db.close(); resolve(Boolean(request.result?.dirty && request.result.content.includes('Recovered offline'))); }; };
+    }), cacheKey)).toBe(true);
     await page.reload();
     await expect(page.locator('html')).toHaveAttribute('lang', 'pt-BR');
     await expect(page.locator('.cm-content')).toContainText('Recovered offline / recuperado.');

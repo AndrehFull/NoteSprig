@@ -3,7 +3,7 @@ import { resolveAsset } from './paths';
 import type { NoteSummary } from './types';
 
 export function baseName(filePath: string) {
-  return filePath.split('/').at(-1)?.replace(/\.(md|canvas|base)$/i, '') || filePath;
+  return filePath.split('/').at(-1)?.replace(/\.(md|canvas|base|board)$/i, '') || filePath;
 }
 
 export function parentPath(filePath: string) {
@@ -50,7 +50,7 @@ export type KnowledgeNode = {
   target?: string;
   origin?: string;
 };
-export type KnowledgeEdge = { source: string; target: string };
+export type KnowledgeEdge = { source: string; target: string; kind?:'reference'|'contains' };
 export type KnowledgeGraph = { nodes: KnowledgeNode[]; edges: KnowledgeEdge[] };
 export type GraphFilters = { query: string; showTags: boolean; showUnresolved: boolean; showOrphans: boolean; showAttachments?: boolean; files?: NoteSummary[]; focusPath?: string; depth: number };
 
@@ -73,18 +73,19 @@ export function buildKnowledgeGraph(notes: NoteSummary[], filters: GraphFilters)
   const edgeKeys = new Set<string>();
   const edges: KnowledgeEdge[] = [];
   for (const note of notes) nodes.set(note.path, { id: note.path, path: note.path, label: baseName(note.path), kind: 'note', tags: note.tags, degree: 0 });
-  const attachments = (filters.files || []).filter((file) => file.kind === 'attachment' || file.kind === 'canvas' || file.kind === 'base');
+  const attachments = (filters.files || []).filter((file) => file.kind === 'attachment' || file.kind === 'canvas' || file.kind === 'base' || file.kind === 'board');
   if (filters.showAttachments) for (const file of attachments) nodes.set(file.path, { id: file.path, path: file.path, label: baseName(file.path), kind: 'attachment', tags: [], degree: 0 });
-  function connect(source: string, target: string) {
+  function connect(source: string, target: string,kind:'reference'|'contains'='reference') {
     if (source === target) return;
     const key = JSON.stringify([source, target]);
     if (edgeKeys.has(key)) return;
     edgeKeys.add(key);
-    edges.push({ source, target });
+    edges.push({ source, target, ...(kind==='contains'?{kind}:{}) });
   }
+  if(filters.showAttachments)for(const board of attachments.filter(file=>file.kind==='board'))for(const link of board.links){if(nodes.has(link.target))connect(board.path,link.target,'contains');}
   for (const note of notes) {
     for (const link of note.links) {
-      if (/\.(png|jpe?g|gif|svg|webp|avif|pdf|canvas|base|mp3|wav|ogg|m4a|mp4|webm|txt|csv|zip|json)$/i.test(link.target)) {
+      if (/\.(png|jpe?g|gif|svg|webp|avif|pdf|canvas|base|board|mp3|wav|ogg|m4a|mp4|webm|txt|csv|zip|json)$/i.test(link.target)) {
         if (filters.showAttachments) { const target = resolveAsset(link.target, note.path, attachments.map((file) => file.path)); if (nodes.has(target)) connect(note.path, target); }
         continue;
       }

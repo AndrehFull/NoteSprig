@@ -16,6 +16,7 @@ function brandPlugin(): Plugin {
 export default defineConfig({
   plugins: [brandPlugin(), react()],
   build: {
+    manifest: true,
     rollupOptions: {
       output: {
         manualChunks(id) {

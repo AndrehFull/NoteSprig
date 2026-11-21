@@ -5,6 +5,14 @@ const LEGACY_MEDIA = '__LEGACY_MEDIA__';
 const ASSETS = __ASSETS__;
 const MESSAGES = __OFFLINE_MESSAGES__;
 const languages = new Map();
+function validMediaContext(url) {
+    if (!url.searchParams.has('context')) return true; // Earlier clients retain their exact legacy URLs.
+    try {
+        const context = JSON.parse(url.searchParams.get('context'));
+        const uuid = /^[a-f\d]{8}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{12}$/i;
+        return context && ['vaultId', 'restoreGeneration', 'epoch'].every((key) => typeof context[key] === 'string' && uuid.test(context[key]));
+    } catch { return false; }
+}
 function message(event, key) {
     const requested = languages.get(event.clientId) || event.request.headers.get('Accept-Language') || 'en';
     return MESSAGES[String(requested).toLowerCase().startsWith('pt') ? 'pt-BR' : 'en'][key];
@@ -28,7 +36,9 @@ self.addEventListener('activate', (event) => event.waitUntil((async () => {
         }
         catch { /* Keep the previous private cache available if migration fails. */ }
     }
-    await Promise.all(keys.filter((key) => (key.startsWith('notesprig-shell-') || key.startsWith(LEGACY_SHELL)) && key !== SHELL).map((key) => caches.delete(key)));
+    // Open clients may still depend on a previous build's hashed chunks. Keep
+    // their public caches across activation; never force a work-losing upgrade.
+    // Public cache cleanup is intentionally deferred to an explicit lifecycle.
     await self.clients.claim();
 })()));
 self.addEventListener('message', (event) => { if (event.data?.type === 'SET_LANGUAGE' && event.source?.id && ['en', 'pt-BR'].includes(event.data.language)) languages.set(event.source.id, event.data.language); if (event.data?.type === 'CLEAR_PRIVATE')
@@ -42,6 +52,8 @@ self.addEventListener('fetch', (event) => {
             return;
         event.respondWith((async () => {
             const cache = await caches.open(MEDIA);
+            const scoped = url.searchParams.has('context');
+            const valid = validMediaContext(url);
             try {
                 const response = await fetch(request);
                 if (response.status === 401) {
@@ -50,7 +62,7 @@ self.addEventListener('fetch', (event) => {
                         await (await caches.open(LEGACY_MEDIA)).delete(request);
                     return response;
                 }
-                if (response.ok && Number(response.headers.get('content-length')) < 10 * 1024 * 1024) {
+                if (valid && response.ok && Number(response.headers.get('content-length')) < 10 * 1024 * 1024) {
                     await cache.put(request, response.clone());
                     const keys = await cache.keys();
                     for (const key of keys.slice(0, Math.max(0, keys.length - 40)))
@@ -59,7 +71,11 @@ self.addEventListener('fetch', (event) => {
                 return response;
             }
             catch {
-                return await cache.match(request) || await caches.match(request, { cacheName: LEGACY_MEDIA }) || new Response(message(event, "Attachment unavailable offline."), { status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+                // The complete scoped URL is the key. Never reinterpret a path or
+                // consult an unverified legacy cache for a scoped request.
+                const cached = valid ? await cache.match(request) : undefined;
+                const legacy = valid && !scoped ? await caches.match(request, { cacheName: LEGACY_MEDIA }) : undefined;
+                return cached || legacy || new Response(message(event, "Attachment unavailable offline."), { status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
             }
         })());
         return;
@@ -68,5 +84,14 @@ self.addEventListener('fetch', (event) => {
         event.respondWith(fetch(request).catch(async () => await (await caches.open(SHELL)).match('/index.html') || new Response(message(event, "Open the app online before using it offline."), { status: 503 })));
         return;
     }
-    event.respondWith(caches.open(SHELL).then((cache) => cache.match(request)).then((cached) => cached || fetch(request)));
+    event.respondWith((async () => {
+        const current = await (await caches.open(SHELL)).match(request);
+        if (current) return current;
+        const keys = await caches.keys();
+        for (const key of keys.filter((name) => name.startsWith('notesprig-board-feature-') || name.startsWith('notesprig-shell-') || name.startsWith(LEGACY_SHELL))) {
+            const cached = await (await caches.open(key)).match(request);
+            if (cached) return cached;
+        }
+        return fetch(request);
+    })());
 });

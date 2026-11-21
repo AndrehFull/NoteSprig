@@ -2,6 +2,7 @@ import { t, translateMessage } from '../i18n';
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { ArrowUpRight, Check, Copy, Download, FilePlus2, Focus, Group, Link2, Lock, Minus, MousePointer2, Palette, Plus, Redo2, Trash2, Type, Undo2, Unlock, X } from 'lucide-react';
 import { api } from '../api';
+import { mediaUrl } from '../media';
 import { baseName } from '../knowledge';
 import { renderMarkdown } from '../markdown';
 import { extractSection, hydrateRichContent } from './RichPreview';
@@ -42,7 +43,7 @@ function FileCard({ node, files, onOpen, onLink }: {
             void hydrateRichContent(preview.current, file, files, () => cancelled).catch(() => { });
         return () => { cancelled = true; };
     }, [content, file, node.subpath, files]);
-    const url = `/api/attachment?path=${encodeURIComponent(file)}`;
+    const url = mediaUrl(file);
     return <><div className="canvas-file-title"><button onClick={() => onOpen(file)} title={t("Open file")}><FilePlus2 size={13}/>{baseName(file)}<ArrowUpRight size={12}/></button></div><div className="canvas-file-body">
     {error ? <p className="form-error">{translateMessage(error)}</p> : /\.md$/i.test(file) ? <div className="markdown-preview" ref={preview} onClick={(event) => {
                 const anchor = (event.target as HTMLElement).closest('a');
@@ -544,7 +545,7 @@ export function CanvasView({ path, value, onChange, files, onOpen, onNotice, onL
           {node.type === 'group' ? <>{editing === node.id && !readOnly ? <input aria-label={t("Group name")} autoFocus value={node.label || ''} onChange={(event) => patchNode(node.id, { label: event.target.value })} onBlur={() => setEditing(null)} onKeyDown={(event) => {
                         if (event.key === 'Enter')
                             setEditing(null);
-                    }}/> : <div className="canvas-group-label">{node.label || t("Group")}</div>}{node.background && <img className="canvas-group-background" style={{ objectFit: node.backgroundStyle === 'ratio' ? 'contain' : 'cover' }} src={`/api/attachment?path=${encodeURIComponent(node.background)}`} alt=""/>}</> : node.type === 'text' ? editing === node.id && !readOnly ? <textarea aria-label={t("Card text")} autoFocus value={node.text || ''} onChange={(event) => patchNode(node.id, { text: event.target.value })} onKeyDown={(event) => {
+                    }}/> : <div className="canvas-group-label">{node.label || t("Group")}</div>}{node.background && <img className="canvas-group-background" style={{ objectFit: node.backgroundStyle === 'ratio' ? 'contain' : 'cover' }} src={mediaUrl(node.background)} alt=""/>}</> : node.type === 'text' ? editing === node.id && !readOnly ? <textarea aria-label={t("Card text")} autoFocus value={node.text || ''} onChange={(event) => patchNode(node.id, { text: event.target.value })} onKeyDown={(event) => {
                     if (event.key === 'Escape') {
                         event.stopPropagation();
                         setEditing(null);

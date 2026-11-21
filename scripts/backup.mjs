@@ -145,6 +145,14 @@ async function restoreBackup() {
         await mkdir(stage, { mode: 0o700 });
         await exec('tar', ['-xzf', archive, '--no-same-owner', '--no-same-permissions', '-C', stage], { maxBuffer: 8 * 1024 * 1024 });
         await rejectLinks(stage);
+        // Restoring even an identical snapshot creates a new workspace generation.
+        // Previously scoped drafts/references must not silently attach to restored paths.
+        const { BoardTransactions } = await import('../server/board-transactions.mjs');
+        const { BoardReferenceState } = await import('../server/board-reference-state.mjs');
+        const coordinator=await new BoardTransactions(stage).initialize();
+        const references=new BoardReferenceState(stage,coordinator);
+        await references.initialize();
+        await references.runChange({rotateRestoreGeneration:true});
         if (exists)
             await rmdir(target);
         await rename(stage, target);

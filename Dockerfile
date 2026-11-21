@@ -14,6 +14,7 @@ COPY --from=build --chown=node:node /app/dist ./dist
 COPY --chown=node:node branding.json ./branding.json
 COPY --chown=node:node LICENSE ./LICENSE
 COPY --chown=node:node server ./server
+COPY --chown=node:node shared ./shared
 COPY --chown=node:node scripts/backup.mjs ./scripts/backup.mjs
 USER node
 EXPOSE 4317

@@ -214,3 +214,15 @@ button { -webkit-tap-highlight-color: transparent; }
 .composer-field { display: flex; flex-direction: column; gap: 8px; margin: 15px 0; }.composer-field select { height: 35px; max-width: 100%; padding: 0 8px; border: 1px solid var(--line); border-radius: 4px; color: var(--text); background: var(--bg); font-size: 12px; }.composer-toggle { display: flex; align-items: center; gap: 7px; color: var(--muted); }.composer-preview { max-height: 280px; overflow: auto; padding: 12px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; font: 11px/1.7 var(--mono); }
 .footnotes { margin-top: 30px; font-size: .85em; color: var(--muted); }.footnotes li { scroll-margin-top: 20px; }.footnote-ref { font-size: .72em; padding: 0 2px; }
 .canvas-group { pointer-events: none; }.canvas-group > .canvas-group-label, .canvas-group > input, .canvas-group > .connect-handle, .canvas-group > .resize-handle { pointer-events: auto; }
+
+/* The drawing engine owns its scene; host controls stay outside that scene. */
+.board-view{height:100%;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+.board-toolbar,.board-actions{display:flex;gap:8px;align-items:center;padding:8px 12px;flex-wrap:wrap;border-bottom:1px solid var(--border);flex-shrink:0}
+.board-toolbar strong{margin-right:auto}.board-toolbar [role=status]{font-size:12px;color:var(--text-muted)}
+.board-toolbar details{position:relative}.board-toolbar details[open]{max-width:360px}
+.board-actions label{display:flex;align-items:center;gap:8px}.board-actions select{max-width:260px}
+.board-stage{flex:1;min-height:280px;position:relative;isolation:isolate}
+.board-notice{padding:10px 16px;margin:0;border-bottom:1px solid var(--border);font-size:13px;flex-shrink:0}
+.board-review{padding:12px;max-height:260px;overflow:auto}.board-review label{display:flex;gap:10px;margin:6px 0}
+.board-note-list{padding:8px 12px;border-top:1px solid var(--border);max-height:180px;overflow:auto;flex-shrink:0}.board-note-list li{display:flex;gap:10px;align-items:center;margin:8px 0}.board-note-list li span{margin-right:auto}
+@media(max-width:700px){.board-actions select{max-width:160px}.board-toolbar{font-size:12px}.board-stage{min-height:220px}}

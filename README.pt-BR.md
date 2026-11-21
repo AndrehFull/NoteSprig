@@ -99,7 +99,7 @@ O GitHub hospeda o código. O GitHub Pages não executa a API Node nem armazena 
 - O layout oferece dois grupos de painéis. A exportação do Canvas é esquemática, e as visualizações estruturadas implementam um subconjunto de fórmulas e layouts.
 - Plugins externos não são executados. Clientes nativos e funcionalidades de IA ainda não estão disponíveis.
 
-Consulte o [guia de uso](docs/user-guide.md) e o [roadmap](docs/roadmap.md).
+Consulte o [guia de uso](docs/user-guide.md) e o [roadmap](docs/roadmap.md). Os quadros visuais com Excalidraw estão disponíveis de forma experimental em **Configurações → Ativar quadros visuais experimentais**. Consulte o [guia dos quadros visuais](docs/visual-boards.md), em inglês, e o [plano de validação](docs/design/unified-canvas-validation.md). Os testes em aparelhos físicos, leitores de tela e quadros grandes ainda precisam ser concluídos.
 
 ## Desenvolvimento e verificações
 

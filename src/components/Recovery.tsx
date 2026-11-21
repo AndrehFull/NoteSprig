@@ -2,6 +2,7 @@ import { t, translateMessage, getLocale } from '../i18n';
 import { useEffect, useState } from 'react';
 import { Download, History, RotateCcw, Trash2, X } from 'lucide-react';
 import { api } from '../api';
+import { mediaUrl } from '../media';
 import { Modal } from './NoteTools';
 import type { NoteDocument, TrashEntry, Version } from '../types';
 export function HistoryModal({ note, onClose, onRestore }: {
@@ -78,7 +79,7 @@ export function AttachmentView({ path }: {
     path: string;
 }) {
     const [text, setText] = useState('');
-    const url = `/api/attachment?path=${encodeURIComponent(path)}`;
+    const url = mediaUrl(path);
     useEffect(() => {
         let cancelled = false;
         if (/\.(txt|csv|json)$/i.test(path))
@@ -91,5 +92,5 @@ export function AttachmentView({ path }: {
             });
         return () => { cancelled = true; };
     }, [path]);
-    return <section className="attachment-view" aria-label={t("Attachment preview")}><div className="attachment-toolbar"><strong>{path.split('/').at(-1)}</strong><a className="quiet-button" href={`/api/download?path=${encodeURIComponent(path)}`} download><Download size={14}/>{" " + t("Download")}</a></div>{/\.(png|jpe?g|gif|webp|avif|svg)$/i.test(path) ? <img src={url} alt={path.split('/').at(-1)}/> : /\.pdf$/i.test(path) ? <iframe title={path} src={url}/> : /\.(mp3|wav|ogg|m4a)$/i.test(path) ? <audio src={url} controls/> : /\.(mp4|webm)$/i.test(path) ? <video src={url} controls/> : /\.(txt|csv|json)$/i.test(path) ? <pre>{text}</pre> : <p className="muted">{t("Use Download to open this file on your device.")}</p>}</section>;
+    return <section className="attachment-view" aria-label={t("Attachment preview")}><div className="attachment-toolbar"><strong>{path.split('/').at(-1)}</strong><a className="quiet-button" href={mediaUrl(path, true)} download><Download size={14}/>{" " + t("Download")}</a></div>{/\.(png|jpe?g|gif|webp|avif|svg)$/i.test(path) ? <img src={url} alt={path.split('/').at(-1)}/> : /\.pdf$/i.test(path) ? <iframe title={path} src={url}/> : /\.(mp3|wav|ogg|m4a)$/i.test(path) ? <audio src={url} controls/> : /\.(mp4|webm)$/i.test(path) ? <video src={url} controls/> : /\.(txt|csv|json)$/i.test(path) ? <pre>{text}</pre> : <p className="muted">{t("Use Download to open this file on your device.")}</p>}</section>;
 }

@@ -1,3 +1,7 @@
+import { bootstrapWorkspace, scopedKey, forgetWorkspace } from './workspace';
+import { pendingPrivateWork } from './storage';
+import { saveAllBoards, clearBoardSessions, dirtyBoards } from './boards/session';
+import { createBoard, sameContext, type ReferenceContext } from '../shared/board-schema.mjs';
 import { t, useLanguage, translateMessage } from './i18n';
 import { LanguageSelector } from './components/LanguageSelector';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type SetStateAction, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
@@ -6,6 +10,7 @@ import { applyTemplate, formatDate, defaultVaultSettings, type VaultSettings } f
 import { TemplatesModal } from './components/TemplatesModal';
 import { getLocal, setLocal } from './storage';
 import { api } from './api';
+import { mediaUrl } from './media';
 import { BRAND } from './brand';
 import { baseName, parentPath, resolveTargets, type KnowledgeNode } from './knowledge';
 import { normalizeTarget } from './markdown';
@@ -17,6 +22,9 @@ import { AudioRecorder, SlidesView, WebView } from './components/CoreExtras';
 import { PropertiesPanel } from './components/PropertiesPanel';
 import { RichPreview } from './components/RichPreview';
 import { resolveAsset } from './paths';
+const BoardView = lazy(() => import('./boards/BoardView'));
+import RecoveryDialog from './boards/RecoveryDialog';
+import { BoardBoundary } from './components/BoardBoundary';
 const MarkdownEditor = lazy(() => import('./components/MarkdownEditor'));
 import { CanvasView } from './components/CanvasView';
 import { AttachmentView, HistoryModal, TrashModal } from './components/Recovery';
@@ -28,7 +36,7 @@ import { CreateNoteModal, Login, Modal, PropertiesModal, TextActionModal } from 
 import type { NoteDocument, NoteSummary, SearchItem } from './types';
 type Tab = {
     id: string;
-    kind: 'note' | 'canvas' | 'base' | 'attachment' | 'web' | 'graph' | 'local' | 'empty';
+    kind: 'note' | 'canvas' | 'board' | 'base' | 'attachment' | 'web' | 'graph' | 'local' | 'empty';
     path?: string;
     pinned?: boolean;
 };
@@ -47,9 +55,9 @@ type ModalState = {
     note: Draft;
     remote: NoteDocument;
 } | {
-    kind: 'commands' | 'switcher' | 'settings' | 'trash';
+    kind: 'commands' | 'switcher' | 'settings' | 'trash' | 'private-recovery';
 } | {
-    kind: 'canvas-create' | 'base-create' | 'folder-create';
+    kind: 'canvas-create' | 'board-create' | 'base-create' | 'folder-create';
     initial?: string;
 } | {
     kind: 'history';
@@ -90,7 +98,7 @@ function storedList(key: string): string[] {
         return [];
     }
 }
-function readWorkspace(): {
+function readWorkspace(key='notesprig.workspace'): {
     tabs: Tab[];
     selected: string;
     secondary: string | null;
@@ -98,8 +106,8 @@ function readWorkspace(): {
     modes: Record<string, 'live' | 'source' | 'read'>;
 } {
     try {
-        const data = JSON.parse(localStorage.getItem('notesprig.workspace') || '{}');
-        const tabs = Array.isArray(data.tabs) ? data.tabs.filter((tab: Tab) => tab && typeof tab.id === 'string' && ['note', 'canvas', 'base', 'attachment', 'web', 'graph', 'local', 'empty'].includes(tab.kind)) : [globalGraph];
+        const data = JSON.parse(localStorage.getItem(key) || '{}');
+        const tabs = Array.isArray(data.tabs) ? data.tabs.filter((tab: Tab) => tab && typeof tab.id === 'string' && ['note', 'canvas', 'board', 'base', 'attachment', 'web', 'graph', 'local', 'empty'].includes(tab.kind)) : [globalGraph];
         return { tabs: tabs.length ? tabs : [globalGraph], selected: typeof data.selected === 'string' ? data.selected : 'graph', secondary: typeof data.secondary === 'string' ? data.secondary : null, split: data.split === 'down' ? 'down' : 'right', modes: data.modes || {} };
     }
     catch {
@@ -118,7 +126,7 @@ function App() {
     const [files, setFiles] = useState<NoteSummary[]>([]);
     const uploadInput = useRef<HTMLInputElement>(null);
     const zipInput = useRef<HTMLInputElement>(null);
-    const initialWorkspace = useRef(readWorkspace());
+    const initialWorkspace = useRef({tabs:[globalGraph],selected:'graph',secondary:null as string|null,split:'right' as 'right'|'down',modes:{} as Record<string,'live'|'source'|'read'>});
     const [tabs, setTabs] = useState<Tab[]>(initialWorkspace.current.tabs);
     const [selectedTab, setSelectedTab] = useState(initialWorkspace.current.selected);
     const [secondaryTab, setSecondaryTab] = useState<string | null>(initialWorkspace.current.secondary);
@@ -142,6 +150,7 @@ function App() {
     const [searchBusy, setSearchBusy] = useState(false);
     const [modal, setModal] = useState<ModalState>(null);
     const [notice, setNotice] = useState('');
+    const [boardsEnabled,setBoardsEnabled] = useState(() => localStorage.getItem('notesprig.boardsEnabled')==='true');
     const [bookmarks, setBookmarks] = useState(() => storedList('notesprig.bookmarks'));
     const [history, setHistory] = useState<{
         paths: string[];
@@ -164,8 +173,8 @@ function App() {
             const combined = [...list, ...pending.filter((draft) => !list.some((note) => note.path === draft.path))];
             setNotes((current) => JSON.stringify(current) === JSON.stringify(combined) ? current : combined);
             setFiles((current) => JSON.stringify(current) === JSON.stringify(entries) ? current : entries);
-            void setLocal('notes', combined);
-            void setLocal('files', entries);
+            void setLocal(scopedKey('notes'), combined);
+            void setLocal(scopedKey('files'), entries);
             docs.connected();
             void docs.reconcile(entries).catch(() => { });
             return combined;
@@ -174,8 +183,8 @@ function App() {
             if (!(error as Error & {
                 status?: number;
             }).status) {
-                const list = await getLocal<NoteSummary[]>('notes');
-                const entries = await getLocal<NoteSummary[]>('files');
+                const list = await getLocal<NoteSummary[]>(scopedKey('notes'));
+                const entries = await getLocal<NoteSummary[]>(scopedKey('files'));
                 if (list) {
                     const pending = Object.values(docs.ref.current).filter((note) => note.isNew);
                     const combined = [...list, ...pending.filter((note) => note.kind !== 'canvas' && !list.some((file) => file.path === note.path))];
@@ -191,9 +200,10 @@ function App() {
     const treeFiles = useMemo(() => [...notes, ...files.filter((file) => file.kind !== 'markdown')], [notes, files]);
     const onSaved = useCallback((note: NoteDocument) => {
         const { path, title, aliases, tags, links, mtime, size, propertyError, kind } = note;
-        setFiles((current) => { const summary = { path, title, aliases, tags, links, mtime, size, propertyError, kind }; const next = current.some((item) => item.path === path) ? current.map((item) => item.path === path ? summary : item) : [...current, summary]; void setLocal('files', next); return next; });
+        setFiles((current) => { const summary = { path, title, aliases, tags, links, mtime, size, propertyError, kind }; const next = current.some((item) => item.path === path) ? current.map((item) => item.path === path ? summary : item) : [...current, summary]; void setLocal(scopedKey('files'), next); return next; });
         if (kind === 'markdown' || !kind)
-            setNotes((current) => { const summary = { path, title, aliases, tags, links, mtime, size, propertyError, kind }; const next = current.some((item) => item.path === path) ? current.map((item) => item.path === path ? summary : item) : [...current, summary]; void setLocal('notes', next); return next; });
+            setNotes((current) => { const summary = { path, title, aliases, tags, links, mtime, size, propertyError, kind }; const next = current.some((item) => item.path === path) ? current.map((item) => item.path === path ? summary : item) : [...current, summary]; void setLocal(scopedKey('notes'), next); return next; });
+        window.dispatchEvent(new CustomEvent('notesprig:document-saved', { detail: { path, mtime } }));
     }, []);
     const onSaveError = useCallback((error: unknown, note: Draft) => {
         if ((error as Error & {
@@ -240,8 +250,8 @@ function App() {
         const ticket = ++navigation.current;
         setLoading(true);
         try {
-            const kind = /\.canvas$/i.test(path) ? 'canvas' : /\.base$/i.test(path) ? 'base' : /\.md$/i.test(path) ? 'note' : 'attachment';
-            if (kind !== 'attachment')
+            const kind = /\.board$/i.test(path) ? 'board' : /\.canvas$/i.test(path) ? 'canvas' : /\.base$/i.test(path) ? 'base' : /\.md$/i.test(path) ? 'note' : 'attachment';
+            if (kind !== 'attachment' && kind !== 'board')
                 await docs.load(path);
             if (ticket !== navigation.current)
                 return;
@@ -250,7 +260,7 @@ function App() {
             selectTab(next.id);
             if (kind === 'note' && /\.md$/i.test(path)) {
                 setContextPath(path);
-                localStorage.setItem('notesprig.lastNote', path);
+                localStorage.setItem(scopedKey('ui:lastNote'), path);
             }
             if (record)
                 setHistory((current) => current.paths[current.index] === path ? current : { paths: [...current.paths.slice(0, current.index + 1), path], index: current.index + 1 });
@@ -270,6 +280,7 @@ function App() {
             setNotice(t("Unpin the tab before closing it."));
             return;
         }
+        if (closing.kind==='board' && !(await saveAllBoards())) return;
         if (closing.path && !(await docs.save(closing.path)))
             return;
         if (secondaryTab === closing.id) {
@@ -290,21 +301,28 @@ function App() {
         showTab(local ? { id: `local:${path}`, kind: 'local', path } : globalGraph);
     }
     async function beginApp() {
-        setAuthenticated(true);
         try {
+            await bootstrapWorkspace(api.boardContext);
+            docs.activateWorkspace();
+            const workspace=readWorkspace(scopedKey('ui:workspace'));
+            setTabs(workspace.tabs);setSelectedTab(workspace.selected);setSecondaryTab(workspace.secondary);setSplitDirection(workspace.split);setViewModes(workspace.modes);
+            setBookmarks(storedList(scopedKey('ui:bookmarks')));
+            setAuthenticated(true);
             sessionStorage.setItem('notesprig.unlocked', 'true');
-            const configuration = await api.settings().catch(() => getLocal<VaultSettings>('settings'));
+            const configuration = await api.settings().catch(() => getLocal<VaultSettings>(scopedKey('settings')));
             if (configuration) {
                 setVaultSettings({ ...defaultVaultSettings, ...configuration } as VaultSettings);
-                void setLocal('settings', configuration);
+                void setLocal(scopedKey('settings'), configuration);
             }
+            const quarantined = await pendingPrivateWork();
+            if (quarantined.some(([key])=>key.startsWith('quarantine:'))) setModal({kind:'private-recovery'});
             const recovered = await docs.recover();
             if (recovered)
                 setNotice(t("{v0} draft(s) recovered from this browser.", { v0: recovered }));
             const list = await refreshNotes();
-            await Promise.all(tabs.filter((tab) => tab.path && ['note', 'canvas', 'base'].includes(tab.kind)).map((tab) => docs.load(tab.path!).catch(() => { })));
+            await Promise.all(workspace.tabs.filter((tab) => tab.path && ['note', 'canvas', 'base'].includes(tab.kind)).map((tab) => docs.load(tab.path!).catch(() => { })));
             void api.files().then((entries) => docs.prefetch(entries)).catch(() => { });
-            const last = localStorage.getItem('notesprig.lastNote');
+            const last = localStorage.getItem(scopedKey('ui:lastNote'));
             if (last && list.some((note) => note.path === last)) {
                 await docs.load(last);
                 setContextPath(last);
@@ -312,6 +330,7 @@ function App() {
         }
         catch (error) {
             setNotice(error instanceof Error ? error.message : t("Could not load the vault."));
+            setAuthenticated(false);
         }
     }
     useEffect(() => {
@@ -333,11 +352,11 @@ function App() {
     useEffect(() => { const handler = () => setAuthenticated(false); window.addEventListener('notesprig:auth-required', handler); return () => window.removeEventListener('notesprig:auth-required', handler); }, []);
     useEffect(() => {
         if (authenticated)
-            localStorage.setItem('notesprig.workspace', JSON.stringify({ tabs, selected: selectedTab, secondary: secondaryTab, split: splitDirection, modes: viewModes }));
+            localStorage.setItem(scopedKey('ui:workspace'), JSON.stringify({ tabs, selected: selectedTab, secondary: secondaryTab, split: splitDirection, modes: viewModes }));
     }, [tabs, selectedTab, secondaryTab, splitDirection, viewModes, authenticated]);
     useEffect(() => { document.documentElement.dataset.theme = theme; localStorage.setItem('notesprig.theme', theme); }, [theme]);
     useEffect(() => { localStorage.setItem('notesprig.readableWidth', String(readableWidth)); }, [readableWidth]);
-    useEffect(() => { localStorage.setItem('notesprig.bookmarks', JSON.stringify(bookmarks)); }, [bookmarks]);
+    useEffect(() => { if(authenticated)localStorage.setItem(scopedKey('ui:bookmarks'),JSON.stringify(bookmarks)); },[bookmarks,authenticated]);
     useEffect(() => { localStorage.setItem('notesprig.leftWidth', String(leftWidth)); localStorage.setItem('notesprig.rightWidth', String(rightWidth)); }, [leftWidth, rightWidth]);
     useEffect(() => {
         if (!authenticated)
@@ -374,6 +393,7 @@ function App() {
     }, [leftTab, search]);
     useEffect(() => {
         const handler = (event: KeyboardEvent) => {
+            if ((event.target as Element)?.closest?.('[data-board-engine]')) return;
             if (!(event.ctrlKey || event.metaKey))
                 return;
             const key = event.key.toLowerCase();
@@ -587,6 +607,7 @@ function App() {
         setModal(null);
     }
     async function moveFile(from: string, to: string) {
+        if (!(await saveAllBoards()) || dirtyBoards()) throw new Error(t("Synchronize or export pending boards before changing files."));
         if (docs.offline)
             throw new Error(t("Reconnect to reorganize vault files."));
         for (const document of Object.values(docs.ref.current))
@@ -637,7 +658,7 @@ function App() {
             return;
         }
         if (action === 'download') {
-            window.location.href = `/api/download?path=${encodeURIComponent(path)}`;
+            window.location.href = mediaUrl(path,true);
             return;
         }
         if (action === 'merge') {
@@ -645,6 +666,7 @@ function App() {
             return;
         }
         if (action === 'history') {
+            if(/\.board$/i.test(path)){void openNote(path);return;}
             void docs.load(path).then((note) => setModal({ kind: 'history', note })).catch((error: Error) => setNotice(error.message));
             return;
         }
@@ -656,12 +678,16 @@ function App() {
                     let target = t("{v0} copy{v1}", { v0: stem, v1: extension }), number = 2;
                     while (treeFiles.some((file) => file.path === target))
                         target = t("{v0} copy {v1}{v2}", { v0: stem, v1: number++, v2: extension });
-                    if (/\.(md|canvas|base)$/i.test(path)) {
+                    if(/\.board$/i.test(path)) {
+                        const context=await api.boardContext(),source=await api.board(path,context);
+                        const board=sameContext(source.board.referenceContext,context)?{...source.board,boardId:crypto.randomUUID()}:(await import('./boards/portability')).prepareImportedBoard(source.board,context);
+                        await api.saveBoard({path:target,board,context},true);
+                    } else if (/\.(md|canvas|base)$/i.test(path)) {
                         const note = await docs.load(path);
                         await docs.create(target, note.content);
                     }
                     else {
-                        const response = await fetch(`/api/download?path=${encodeURIComponent(path)}`);
+                        const response = await fetch(mediaUrl(path,true));
                         if (!response.ok)
                             throw new Error(t("Could not duplicate."));
                         await api.upload(new File([await response.blob()], target.split('/').at(-1)!), target);
@@ -675,6 +701,7 @@ function App() {
             })();
     }
     async function trashFile(path: string) {
+        if (!(await saveAllBoards()) || dirtyBoards()) throw new Error(t("Synchronize or export pending boards before changing files."));
         for (const note of Object.values(docs.ref.current))
             if ((note.path === path || note.path.startsWith(`${path}/`)) && note.dirty && (!(await docs.save(note.path)) || docs.ref.current[note.path]?.dirty))
                 throw new Error(t("Sync the draft before moving it to trash."));
@@ -746,14 +773,20 @@ function App() {
             return;
         }
         for (const doc of Object.values(docs.ref.current))
-            if (doc.dirty && !(await docs.save(doc.path)))
-                return;
+            if (doc.dirty && !(await docs.save(doc.path))) {setModal({kind:'private-recovery'});return;}
         if (Object.values(docs.ref.current).some((doc) => doc.dirty)) {
-            setNotice(t("There are pending offline changes. Reconnect to sync before signing out."));
+            setModal({kind:'private-recovery'});
             return;
         }
+        if (!(await saveAllBoards()) || dirtyBoards()) {setModal({kind:'private-recovery'});return;}
+        if ((await pendingPrivateWork()).length) { setModal({kind:'private-recovery'}); return; }
+        await finishLogout();
+    }
+    async function finishLogout() {
         await api.logout();
+        await clearBoardSessions();
         await docs.clear();
+         forgetWorkspace(); setModal(null);
         localStorage.removeItem('notesprig.workspace');
         setNotes([]);
         setAuthenticated(false);
@@ -780,6 +813,8 @@ function App() {
         return [...result].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
     }, [notes]);
     const commands: Choice[] = [
+        ...(boardsEnabled ? [{id:'board',label:t('New visual board'),run:()=>setModal({kind:'board-create'})}] : []),
+        {id:'recovery',label:t('Private recovery'),run:()=>setModal({kind:'private-recovery'})},
         { id: 'graph', label: t("Graph: open global view"), shortcut: 'Ctrl+G', run: () => showGraph() },
         { id: 'local', label: t("Graph: open this note's local graph"), run: () => showGraph(true) },
         { id: 'new', label: t("Create new note"), shortcut: 'Ctrl+N', run: () => setModal({ kind: 'create', title: '' }) },
@@ -819,7 +854,7 @@ function App() {
         const active = (tab.kind === 'note' || tab.kind === 'canvas' || tab.kind === 'base') && tab.path ? docs.documents[tab.path] : null;
         const mode = viewModes[`${group}:${tab.id}`] || viewModes[tab.id] || 'live';
         const isGraph = tab.kind === 'graph' || tab.kind === 'local';
-        return (tab.kind === 'base' && active ? <BasesView content={active.content} files={treeFiles} onChange={(content) => docs.edit(active.path, content)} onOpen={(path) => void openNote(path)} load={docs.load} onNotice={setNotice} onPropertyChange={async (path, key, value) => {
+        return (tab.kind === 'board' && tab.path ? <BoardBoundary key={tab.path} onRecovery={()=>setModal({kind:'private-recovery'})}><Suspense fallback={<p>{t('Loading…')}</p>}><BoardView featureEnabled={boardsEnabled} key={tab.path} path={tab.path} files={treeFiles} theme={theme==='light'?'light':'dark'} onSaved={()=>{void refreshNotes();}} onOpenNote={async(path,referenceContext:ReferenceContext)=>{ await docs.load(path,referenceContext); const next:Tab={id:`note:${path}`,kind:'note',path};setTabs(current=>current.some(tab=>tab.id===next.id)?current:[...current,next]);setSecondaryTab(next.id);setSplitDirection('right');setContextPath(path);focusGroup('secondary'); }}/></Suspense></BoardBoundary> : tab.kind === 'base' && active ? <BasesView content={active.content} files={treeFiles} onChange={(content) => docs.edit(active.path, content)} onOpen={(path) => void openNote(path)} load={docs.load} onNotice={setNotice} onPropertyChange={async (path, key, value) => {
                 const note = await docs.load(path);
                 docs.edit(path, writeProperties(note.content, { ...readPropertiesForBase(note.content), [key]: value }));
                 if (!(await docs.save(path)))
@@ -891,7 +926,7 @@ function App() {
         <button className="icon-button" onClick={() => setModal({ kind: 'switcher' })} title={t("Open note (Ctrl+O)")} aria-label={t("Open note")}><Files size={19}/></button>
         <button className={`icon-button ${isGraph ? 'active' : ''}`} onClick={() => showGraph()} title={t("Open global graph (Ctrl+G)")} aria-label={t("Open global graph")}><Network size={20}/></button>
         <button className="icon-button" onClick={() => setModal({ kind: 'create', title: '' })} title={t("New note (Ctrl+N)")} aria-label={t("New note")}><FilePlus2 size={19}/></button>
-        <button className="icon-button" aria-label={t("New base")} title={t("New base")} onClick={() => setModal({ kind: 'base-create' })}><Table2 size={19}/></button><button className="icon-button" aria-label={t("New Canvas")} title={t("New Canvas")} onClick={() => setModal({ kind: 'canvas-create' })}><LayoutDashboard size={19}/></button><button className="icon-button" onClick={() => void dailyNote()} title={t("Daily note")} aria-label={t("Daily note")}><CalendarDays size={19}/></button>
+        {boardsEnabled&&<button className="icon-button" aria-label={t("New visual board")} title={t("New visual board")} onClick={()=>setModal({kind:"board-create"})}><LayoutDashboard size={19}/></button>}<button className="icon-button" aria-label={t("New base")} title={t("New base")} onClick={() => setModal({ kind: 'base-create' })}><Table2 size={19}/></button><button className="icon-button" aria-label={t("New Canvas")} title={t("New Canvas")} onClick={() => setModal({ kind: 'canvas-create' })}><LayoutDashboard size={19}/></button><button className="icon-button" onClick={() => void dailyNote()} title={t("Daily note")} aria-label={t("Daily note")}><CalendarDays size={19}/></button>
         <button className="icon-button" onClick={() => setModal({ kind: 'commands' })} title={t("Command palette (Ctrl+P)")} aria-label={t("Command palette")}><Command size={19}/></button>
         <AudioRecorder onStateChange={setRecordingBusy} onNotice={setNotice} onRecorded={async (file) => {
             const target = active && /\.md$/i.test(active.path) ? active.path : undefined;
@@ -924,7 +959,7 @@ function App() {
                     return remaining;
                 });
             }}><button role="tab" aria-selected={selectedTab === item.id} onClick={() => {
-                if ((item.kind === 'note' || item.kind === 'canvas' || item.kind === 'base' || item.kind === 'attachment') && item.path)
+                if ((item.kind === 'note' || item.kind === 'canvas' || item.kind === 'board' || item.kind === 'base' || item.kind === 'attachment') && item.path)
                     void openNote(item.path);
                 else
                     showTab(item);
@@ -989,6 +1024,8 @@ function App() {
     {modal?.kind === 'templates' && <TemplatesModal files={treeFiles} folder={vaultSettings.templatesFolder} onClose={() => setModal(null)} onChoose={insertTemplate}/>}
     {modal?.kind === 'file-rename' && <TextActionModal title={modal.folder ? t("Rename or move folder") : t("Rename or move file")} initial={modal.path} label={t("New path")} help={t("References in notes and Canvas files will be updated.")} onClose={() => setModal(null)} onSubmit={async (path) => { await moveFile(modal.path, path); setModal(null); }}/>}
     {modal?.kind === 'file-delete' && <Modal onClose={() => setModal(null)}><h2>{t("Move to trash?")}</h2><p className="muted">{modal.path}{modal.folder ? " " + t("and its contents") : ''}</p><div className="modal-actions"><button className="quiet-button" onClick={() => setModal(null)}>{t("Cancel")}</button><button className="primary-button destructive" onClick={() => void trashFile(modal.path).catch((error: Error) => setNotice(error.message))}>{t("Move to trash")}</button></div></Modal>}
+    {modal?.kind === 'private-recovery' && <Suspense fallback={null}><RecoveryDialog volatileNotes={()=>docs.ref.current} onClose={()=>setModal(null)} onDiscard={finishLogout} onRecovered={()=>{void refreshNotes();}}/></Suspense>}
+    {modal?.kind === 'board-create' && <TextActionModal title={t('New visual board')} initial={t('Untitled')} label={t('Board name')} help={t('Experimental visual board powered by Excalidraw.')} onClose={()=>setModal(null)} onSubmit={async(name)=>{const path=`${name.trim().replace(/\.board$/i,'')}.board`;const context=await api.boardContext();await api.saveBoard({path,board:createBoard(context),context},true);await refreshNotes();setModal(null);await openNote(path);}}/>}
     {modal?.kind === 'base-create' && <TextActionModal title={t("New base")} initial={modal.initial || t("Untitled")} label={t("Base name")} help={t("Views of files and properties in YAML .base format.")} onClose={() => setModal(null)} onSubmit={async (name) => { const path = `${name.trim().replace(/\.base$/i, '')}.base`; await docs.create(path, 'views:\n  - type: table\n    name: Table\n    order:\n      - file.name\n      - note.tags\n'); await refreshNotes(); setModal(null); await openNote(path); }}/>}
     {modal?.kind === 'canvas-create' && <TextActionModal title={t("New Canvas")} initial={modal.initial || t("Untitled")} label={t("Canvas name")} help={t("A JSON Canvas document, compatible with .canvas files.")} onClose={() => setModal(null)} onSubmit={async (name) => { const path = `${name.trim().replace(/\.canvas$/i, '')}.canvas`; await docs.create(path, JSON.stringify({ nodes: [], edges: [] }, null, '\t')); await refreshNotes(); setModal(null); await openNote(path); }}/>}
     {modal?.kind === 'folder-create' && <TextActionModal title={t("New folder")} initial={modal.initial || ''} label={t("Folder path")} help={t("You can create folders and subfolders.")} onClose={() => setModal(null)} onSubmit={async (path) => { await api.folder(path.trim()); await refreshNotes(); setModal(null); }}/>}
@@ -1026,7 +1063,7 @@ function App() {
                 }
             }}>{t("Save as copy")}</button></div></Modal>}
     {(modal?.kind === 'commands' || modal?.kind === 'switcher') && <CommandPicker title={modal.kind === 'commands' ? t("Search commands\u2026") : t("Open a note\u2026")} choices={modal.kind === 'commands' ? commands : notes.map((note) => ({ id: note.path, label: baseName(note.path), detail: note.path, run: () => { void openNote(note.path); } }))} onClose={() => setModal(null)}/>}
-    {modal?.kind === 'settings' && <Modal onClose={() => setModal(null)}><div className="modal-heading"><h2>{t("Settings")}</h2><button className="icon-button" aria-label={t("Close settings")} onClick={() => setModal(null)}><X size={18}/></button></div><LanguageSelector /><label className="settings-row">{t("Appearance")}<select aria-label={t("Appearance")} value={theme} onChange={(event) => setTheme(event.target.value)}><option value="dark">{t("Dark")}</option><option value="light">{t("Light")}</option></select></label><label className="settings-row">{t("Comfortable reading width")}<input type="checkbox" checked={readableWidth} onChange={(event) => setReadableWidth(event.target.checked)}/></label><details className="settings-detail"><summary>{t("Files and daily notes")}</summary>{([['dailyFolder', t("Daily notes folder")], ['dailyFormat', t("Date format")], ['dailyTemplate', t("Daily note template")], ['templatesFolder', t("Templates folder")], ['attachmentFolder', t("Attachments folder")]] as const).map(([key, label]) => <label className="settings-field" key={key}>{label}<input aria-label={label} value={vaultSettings[key]} onChange={(event) => setVaultSettings((current) => ({ ...current, [key]: event.target.value }))} onBlur={() => { void api.setSettings(vaultSettings).then(() => setLocal('settings', vaultSettings)).catch((error: Error) => setNotice(error.message)); }}/></label>)}</details><div className="settings-actions"><button className="quiet-button" onClick={() => { window.location.href = '/api/export'; }}>{t("Export vault ZIP")}</button><button className="quiet-button" onClick={() => zipInput.current?.click()}>{t("Import ZIP")}</button></div><p className="muted small">{t("Appearance is saved in this browser. Daily notes, templates, and attachments use vault settings. Drafts and previously opened documents are available offline on this device.")}</p></Modal>}
+    {modal?.kind === 'settings' && <Modal onClose={() => setModal(null)}><div className="modal-heading"><h2>{t("Settings")}</h2><button className="icon-button" aria-label={t("Close settings")} onClick={() => setModal(null)}><X size={18}/></button></div><LanguageSelector /><label className="settings-row">{t("Enable experimental visual boards")}<input type="checkbox" checked={boardsEnabled} onChange={event=>{setBoardsEnabled(event.target.checked);localStorage.setItem("notesprig.boardsEnabled",String(event.target.checked));}}/></label>{boardsEnabled&&<button onClick={()=>setModal({kind:"board-create"})}>{t("New visual board")}</button>}<button onClick={()=>setModal({kind:"private-recovery"})}>{t("Private recovery")}</button><label className="settings-row">{t("Appearance")}<select aria-label={t("Appearance")} value={theme} onChange={(event) => setTheme(event.target.value)}><option value="dark">{t("Dark")}</option><option value="light">{t("Light")}</option></select></label><label className="settings-row">{t("Comfortable reading width")}<input type="checkbox" checked={readableWidth} onChange={(event) => setReadableWidth(event.target.checked)}/></label><details className="settings-detail"><summary>{t("Files and daily notes")}</summary>{([['dailyFolder', t("Daily notes folder")], ['dailyFormat', t("Date format")], ['dailyTemplate', t("Daily note template")], ['templatesFolder', t("Templates folder")], ['attachmentFolder', t("Attachments folder")]] as const).map(([key, label]) => <label className="settings-field" key={key}>{label}<input aria-label={label} value={vaultSettings[key]} onChange={(event) => setVaultSettings((current) => ({ ...current, [key]: event.target.value }))} onBlur={() => { void api.setSettings(vaultSettings).then(() => setLocal(scopedKey('settings'), vaultSettings)).catch((error: Error) => setNotice(error.message)); }}/></label>)}</details><div className="settings-actions"><button className="quiet-button" onClick={() => { window.location.href = '/api/export'; }}>{t("Export vault ZIP")}</button><button className="quiet-button" onClick={() => zipInput.current?.click()}>{t("Import ZIP")}</button></div><p className="muted small">{t("Appearance is saved in this browser. Daily notes, templates, and attachments use vault settings. Drafts and previously opened documents are available offline on this device.")}</p></Modal>}
     {notice && <div className="toast" role="status"><span>{translateMessage(notice)}</span><button onClick={() => setNotice('')} aria-label={t("Dismiss notice")}><X size={15}/></button></div>}
   </div>;
 }

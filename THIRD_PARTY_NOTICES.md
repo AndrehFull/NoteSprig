@@ -1,13 +1,15 @@
 # Third-party notices
 
-NoteSprig's original code and documentation use MIT. The components below retain their own licenses and copyright notices. This index conservatively includes every locked runtime dependency, including dependencies of the frontend and the production server; some may not appear in a particular tree-shaken build. Development tools and the container base operating system are outside this npm inventory.
+NoteSprig's original code and documentation use MIT. The components below retain their own licenses and copyright notices. This index includes installed runtime dependencies of the frontend and production server; some may not appear in a particular tree-shaken build. Optional binaries for other operating systems or architectures are listed separately and are not distributed by this installation. Development tools and the container base operating system are outside this npm inventory.
 
-Generated from both committed lockfiles and the installed package license files. Regenerate with `npm run notices:generate`; verify with `npm run notices:check`. No timestamps or machine-specific paths are included.
+Generated from both committed lockfiles, installed package license files, and checksum-verified upstream notices where npm omits its license file. Regenerate with `npm run notices:generate`; verify with `npm run notices:check`. No timestamps or machine-specific paths are included.
 
 Full upstream license and notice texts are preserved in [THIRD_PARTY_LICENSES.txt](docs/legal/THIRD_PARTY_LICENSES.txt). Machine-readable package versions, repository metadata, and source archive URLs are in [runtime-dependencies.json](docs/legal/runtime-dependencies.json). Compiled builds also include the licenses under `/legal/`.
 
 ## Components requiring particular attention
 
+- **Excalidraw and its fonts** retain their individual licenses. Font file hashes, exact notices, and upstream source information are recorded in [board-fonts.json](docs/legal/board-fonts.json); font licenses are included below.
+- **sharp/libvips** decode and validate board raster images on the server. The unmodified shared native library retains LGPL-3.0-or-later and the notices of its bundled dependencies. Its pinned build sources and upstream component versions are preserved with the supplemental notices. Users may replace or rebuild the shared library; the project MIT license does not relicense it.
 - **elkjs** is licensed under EPL-2.0 and is a transitive Mermaid dependency. The locked version's source is [kieler/elkjs 0.9.3](https://github.com/kieler/elkjs/tree/0.9.3), with the underlying Java layout implementation in [Eclipse ELK](https://github.com/eclipse-elk/elk). Preserve its license and source availability information when distributing it; an MIT license on this project does not relicense elkjs.
 - **DOMPurify** is offered under `MPL-2.0 OR Apache-2.0`. Both license texts supplied by the package are retained.
 - **KaTeX** includes the mathematical fonts used by the interface. Its supplied license text is retained with the package's notices.
@@ -15,16 +17,23 @@ Full upstream license and notice texts are preserved in [THIRD_PARTY_LICENSES.tx
 
 The distributed npm components are not patched by NoteSprig; bundling and minification do not change their license ownership. If you modify or redistribute a component, review its applicable source and notice requirements. Container images additionally contain Node.js and Debian packages with their own licenses and notices.
 
-## Locked runtime packages (151)
+## Locked runtime packages (295)
 
 | Package | Version | License |
 | --- | --- | --- |
 | `@antfu/install-pkg` | 2.1.0 | MIT |
+| `@braintree/sanitize-url` | 6.0.2 | MIT |
 | `@braintree/sanitize-url` | 7.1.2 | MIT |
+| `@chevrotain/cst-dts-gen` | 11.0.3 | Apache-2.0 |
 | `@chevrotain/cst-dts-gen` | 13.2.0 | Apache-2.0 |
+| `@chevrotain/gast` | 11.0.3 | Apache-2.0 |
 | `@chevrotain/gast` | 13.2.0 | Apache-2.0 |
+| `@chevrotain/regexp-to-ast` | 11.0.3 | Apache-2.0 |
 | `@chevrotain/regexp-to-ast` | 13.2.0 | Apache-2.0 |
+| `@chevrotain/types` | 11.0.3 | Apache-2.0 |
+| `@chevrotain/types` | 11.1.2 | Apache-2.0 |
 | `@chevrotain/types` | 13.2.0 | Apache-2.0 |
+| `@chevrotain/utils` | 11.0.3 | Apache-2.0 |
 | `@chevrotain/utils` | 13.2.0 | Apache-2.0 |
 | `@codemirror/autocomplete` | 6.20.4 | MIT |
 | `@codemirror/commands` | 6.11.1 | MIT |
@@ -38,8 +47,24 @@ The distributed npm components are not patched by NoteSprig; bundling and minifi
 | `@codemirror/state` | 6.7.6 | MIT |
 | `@codemirror/streamparser` | 6.0.0 | MIT |
 | `@codemirror/view` | 6.43.15 | MIT |
+| `@emnapi/runtime` | 1.11.3 | MIT |
+| `@excalidraw/excalidraw` | 0.18.1 | MIT |
+| `@excalidraw/laser-pointer` | 1.3.1 | MIT |
+| `@excalidraw/markdown-to-text` | 0.1.2 | MIT |
+| `@excalidraw/mermaid-to-excalidraw` | 2.2.2 | MIT |
+| `@excalidraw/random-username` | 1.1.0 | MIT |
+| `@floating-ui/core` | 1.8.0 | MIT |
+| `@floating-ui/dom` | 1.8.0 | MIT |
+| `@floating-ui/react-dom` | 2.1.9 | MIT |
+| `@floating-ui/utils` | 0.2.12 | MIT |
 | `@iconify/types` | 2.0.0 | MIT |
 | `@iconify/utils` | 3.1.7 | MIT |
+| `@img/colour` | 1.1.0 | MIT |
+| `@img/sharp-libvips-linux-x64` | 1.3.4 | LGPL-3.0-or-later |
+| `@img/sharp-libvips-linuxmusl-x64` | 1.3.4 | LGPL-3.0-or-later |
+| `@img/sharp-linux-x64` | 0.35.5 | Apache-2.0 |
+| `@img/sharp-linuxmusl-x64` | 0.35.5 | Apache-2.0 |
+| `@img/sharp-wasm32` | 0.35.5 | Apache-2.0 AND LGPL-3.0-or-later AND MIT |
 | `@lezer/common` | 1.5.5 | MIT |
 | `@lezer/css` | 1.3.9 | MIT |
 | `@lezer/highlight` | 1.2.5 | MIT |
@@ -48,7 +73,46 @@ The distributed npm components are not patched by NoteSprig; bundling and minifi
 | `@lezer/lr` | 1.4.12 | MIT |
 | `@lezer/markdown` | 1.8.1 | MIT |
 | `@marijn/find-cluster-break` | 1.0.4 | MIT |
+| `@mermaid-js/parser` | 0.6.3 | MIT |
+| `@mermaid-js/parser` | 1.2.1 | MIT |
 | `@mermaid-js/parser` | 2.0.1 | MIT |
+| `@radix-ui/primitive` | 1.1.1 | MIT |
+| `@radix-ui/primitive` | 1.2.0 | MIT |
+| `@radix-ui/react-arrow` | 1.1.2 | MIT |
+| `@radix-ui/react-collection` | 1.2.0 | MIT |
+| `@radix-ui/react-compose-refs` | 1.1.1 | MIT |
+| `@radix-ui/react-compose-refs` | 1.1.5 | MIT |
+| `@radix-ui/react-context` | 1.1.1 | MIT |
+| `@radix-ui/react-context` | 1.3.0 | MIT |
+| `@radix-ui/react-direction` | 1.2.0 | MIT |
+| `@radix-ui/react-dismissable-layer` | 1.1.5 | MIT |
+| `@radix-ui/react-focus-guards` | 1.1.1 | MIT |
+| `@radix-ui/react-focus-scope` | 1.1.2 | MIT |
+| `@radix-ui/react-id` | 1.1.0 | MIT |
+| `@radix-ui/react-id` | 1.1.4 | MIT |
+| `@radix-ui/react-popover` | 1.1.6 | MIT |
+| `@radix-ui/react-popper` | 1.2.2 | MIT |
+| `@radix-ui/react-portal` | 1.1.4 | MIT |
+| `@radix-ui/react-presence` | 1.1.11 | MIT |
+| `@radix-ui/react-presence` | 1.1.2 | MIT |
+| `@radix-ui/react-primitive` | 2.0.2 | MIT |
+| `@radix-ui/react-primitive` | 2.2.0 | MIT |
+| `@radix-ui/react-roving-focus` | 1.2.1 | MIT |
+| `@radix-ui/react-slot` | 1.1.2 | MIT |
+| `@radix-ui/react-slot` | 1.5.0 | MIT |
+| `@radix-ui/react-tabs` | 1.2.1 | MIT |
+| `@radix-ui/react-use-callback-ref` | 1.1.0 | MIT |
+| `@radix-ui/react-use-callback-ref` | 1.1.5 | MIT |
+| `@radix-ui/react-use-controllable-state` | 1.1.0 | MIT |
+| `@radix-ui/react-use-controllable-state` | 1.3.0 | MIT |
+| `@radix-ui/react-use-effect-event` | 0.0.5 | MIT |
+| `@radix-ui/react-use-escape-keydown` | 1.1.0 | MIT |
+| `@radix-ui/react-use-is-hydrated` | 0.1.3 | MIT |
+| `@radix-ui/react-use-layout-effect` | 1.1.0 | MIT |
+| `@radix-ui/react-use-layout-effect` | 1.1.4 | MIT |
+| `@radix-ui/react-use-rect` | 1.1.0 | MIT |
+| `@radix-ui/react-use-size` | 1.1.0 | MIT |
+| `@radix-ui/rect` | 1.1.0 | MIT |
 | `@types/d3-array` | 3.2.2 | MIT |
 | `@types/d3-axis` | 3.0.6 | MIT |
 | `@types/d3-brush` | 3.0.6 | MIT |
@@ -81,15 +145,31 @@ The distributed npm components are not patched by NoteSprig; bundling and minifi
 | `@types/d3-zoom` | 3.0.9 | MIT |
 | `@types/d3` | 7.4.3 | MIT |
 | `@types/geojson` | 7946.0.16 | MIT |
+| `@types/react-dom` | 19.3.0 | MIT |
+| `@types/react` | 19.3.0 | MIT |
 | `@types/trusted-types` | 2.0.7 | MIT |
 | `@upsetjs/venn.js` | 2.0.0 | MIT |
+| `anymatch` | 3.1.3 | ISC |
+| `aria-hidden` | 1.2.6 | MIT |
+| `binary-extensions` | 2.3.0 | MIT |
+| `braces` | 3.0.3 | MIT |
+| `browser-fs-access` | 0.29.1 | Apache-2.0 |
+| `canvas-roundrect-polyfill` | 0.0.1 | MIT |
+| `chevrotain-allstar` | 0.3.1 | MIT |
+| `chevrotain` | 11.0.3 | Apache-2.0 |
 | `chevrotain` | 13.2.0 | Apache-2.0 |
+| `chokidar` | 3.6.0 | MIT |
+| `clsx` | 1.1.1 | MIT |
 | `codemirror` | 6.0.2 | MIT |
 | `commander` | 15.0.0 | MIT |
 | `commander` | 7.2.0 | MIT |
 | `cose-base` | 1.0.3 | MIT |
 | `cose-base` | 2.2.0 | MIT |
+| `crc-32` | 0.3.0 | Apache-2.0 |
 | `crelt` | 1.0.7 | MIT |
+| `cross-env` | 7.0.3 | MIT |
+| `cross-spawn` | 7.0.6 | MIT |
+| `csstype` | 3.2.3 | MIT |
 | `cytoscape-cose-bilkent` | 4.1.0 | MIT |
 | `cytoscape-fcose` | 2.2.0 | MIT |
 | `cytoscape` | 3.34.4 | MIT |
@@ -131,42 +211,135 @@ The distributed npm components are not patched by NoteSprig; bundling and minifi
 | `dagre-d3-es` | 7.0.14 | MIT |
 | `dayjs` | 1.11.23 | MIT |
 | `delaunator` | 5.1.0 | ISC |
+| `detect-libc` | 2.1.2 | Apache-2.0 |
+| `detect-node-es` | 1.1.0 | MIT |
 | `dompurify` | 3.4.17 | (MPL-2.0 OR Apache-2.0) |
 | `elkjs` | 0.9.3 | EPL-2.0 |
 | `es-toolkit` | 1.53.1 | MIT |
+| `es6-promise-pool` | 2.5.0 | MIT |
+| `fastdom` | 1.0.12 | MIT |
 | `fflate` | 0.8.3 | MIT |
+| `fill-range` | 7.1.1 | MIT |
+| `fractional-indexing` | 3.2.0 | CC0-1.0 |
+| `fuzzy` | 0.1.3 | MIT |
+| `get-nonce` | 1.0.1 | MIT |
+| `glob-parent` | 5.1.2 | ISC |
+| `glur` | 1.1.2 | MIT |
 | `hachure-fill` | 0.5.2 | MIT |
 | `highlight.js` | 11.12.0 | BSD-3-Clause |
 | `iconv-lite` | 0.6.3 | MIT |
+| `image-blob-reduce` | 3.0.1 | MIT |
+| `immutable` | 4.3.9 | MIT |
 | `import-meta-resolve` | 4.2.0 | MIT |
+| `inherits` | 2.0.4 | ISC |
 | `internmap` | 1.0.1 | ISC |
 | `internmap` | 2.0.3 | ISC |
+| `is-binary-path` | 2.1.0 | MIT |
+| `is-extglob` | 2.1.1 | MIT |
+| `is-glob` | 4.0.3 | MIT |
+| `is-number` | 7.0.0 | MIT |
+| `isexe` | 2.0.0 | ISC |
+| `jotai-scope` | 0.7.2 | MIT |
+| `jotai` | 2.11.0 | MIT |
 | `jsep` | 1.6.0 | MIT |
-| `katex` | 0.18.10 | MIT |
 | `katex` | 0.19.1 | MIT |
 | `khroma` | 2.1.0 | MIT |
+| `langium` | 3.3.1 | MIT |
 | `layout-base` | 1.0.2 | MIT |
 | `layout-base` | 2.0.1 | MIT |
 | `lodash-es` | 4.18.1 | MIT |
+| `lodash.debounce` | 4.0.8 | MIT |
+| `lodash.throttle` | 4.1.1 | MIT |
 | `lucide-react` | 0.468.0 | ISC |
 | `marked` | 16.4.2 | MIT |
 | `marked` | 17.0.6 | MIT |
+| `mermaid` | 11.17.2 | MIT |
 | `mermaid` | 12.2.0 | MIT |
+| `multimath` | 2.0.0 | MIT |
+| `nanoid` | 3.3.20 | MIT |
+| `nanoid` | 5.1.16 | MIT |
+| `normalize-path` | 3.0.0 | MIT |
+| `object-assign` | 4.1.1 | MIT |
+| `open-color` | 1.9.1 | MIT |
 | `package-manager-detector` | 1.9.0 | MIT |
+| `pako` | 2.0.3 | (MIT AND Zlib) |
 | `path-data-parser` | 0.1.0 | MIT |
+| `path-key` | 3.1.1 | MIT |
+| `perfect-freehand` | 1.2.0 | MIT |
+| `pica` | 7.1.1 | MIT |
+| `png-chunk-text` | 1.0.0 | MIT |
+| `png-chunks-encode` | 1.0.0 | MIT |
+| `png-chunks-extract` | 1.0.0 | MIT |
 | `points-on-curve` | 0.2.0 | MIT |
+| `points-on-curve` | 1.0.1 | MIT |
 | `points-on-path` | 0.2.1 | MIT |
+| `pwacompat` | 2.0.17 | Apache-2.0 |
 | `react-dom` | 19.3.1 | MIT |
+| `react-remove-scroll-bar` | 2.3.8 | MIT |
+| `react-remove-scroll` | 2.7.2 | MIT |
+| `react-style-singleton` | 2.2.3 | MIT |
 | `react` | 19.3.1 | MIT |
+| `readdirp` | 3.6.0 | MIT |
 | `robust-predicates` | 3.0.3 | Unlicense |
+| `roughjs` | 4.6.4 | MIT |
 | `roughjs` | 4.6.6 | MIT |
 | `rw` | 1.3.3 | BSD-3-Clause |
 | `safer-buffer` | 2.1.2 | MIT |
+| `sass` | 1.51.0 | MIT |
 | `scheduler` | 0.28.0 | MIT |
+| `semver` | 7.8.6 | ISC |
+| `sharp` | 0.35.5 | Apache-2.0 |
+| `shebang-command` | 2.0.0 | MIT |
+| `shebang-regex` | 3.0.0 | MIT |
+| `sliced` | 1.0.1 | MIT |
+| `source-map-js` | 1.2.2 | BSD-3-Clause |
+| `strictdom` | 1.0.1 | MIT |
 | `style-mod` | 4.1.4 | MIT |
 | `stylis` | 4.4.0 | MIT |
 | `tinyexec` | 1.3.1 | MIT |
+| `to-regex-range` | 5.0.1 | MIT |
 | `ts-dedent` | 2.3.0 | MIT |
+| `tslib` | 2.9.1 | 0BSD |
+| `tunnel-rat` | 0.1.2 | MIT |
+| `use-callback-ref` | 1.3.3 | MIT |
+| `use-sidecar` | 1.1.3 | MIT |
+| `use-sync-external-store` | 1.7.0 | MIT |
 | `uuid` | 14.0.3 | MIT |
+| `vscode-jsonrpc` | 8.2.0 | MIT |
+| `vscode-languageserver-protocol` | 3.17.5 | MIT |
+| `vscode-languageserver-textdocument` | 1.0.16 | MIT |
+| `vscode-languageserver-types` | 3.17.5 | MIT |
+| `vscode-languageserver` | 9.0.1 | MIT |
+| `vscode-uri` | 3.0.8 | MIT |
 | `w3c-keyname` | 2.2.8 | MIT |
+| `webworkify` | 1.5.0 | MIT |
+| `which` | 2.0.2 | ISC |
 | `yaml` | 2.9.1 | ISC |
+| `zustand` | 4.5.7 | MIT |
+
+## Optional packages for other platforms (not distributed here)
+
+| Package | Version | License |
+| --- | --- | --- |
+| `@img/sharp-darwin-arm64` | 0.35.5 | Apache-2.0 |
+| `@img/sharp-darwin-x64` | 0.35.5 | Apache-2.0 |
+| `@img/sharp-freebsd-wasm32` | 0.35.5 | Apache-2.0 |
+| `@img/sharp-libvips-darwin-arm64` | 1.3.4 | LGPL-3.0-or-later |
+| `@img/sharp-libvips-darwin-x64` | 1.3.4 | LGPL-3.0-or-later |
+| `@img/sharp-libvips-linux-arm` | 1.3.4 | LGPL-3.0-or-later |
+| `@img/sharp-libvips-linux-arm64` | 1.3.4 | LGPL-3.0-or-later |
+| `@img/sharp-libvips-linux-ppc64` | 1.3.4 | LGPL-3.0-or-later |
+| `@img/sharp-libvips-linux-riscv64` | 1.3.4 | LGPL-3.0-or-later |
+| `@img/sharp-libvips-linux-s390x` | 1.3.4 | LGPL-3.0-or-later |
+| `@img/sharp-libvips-linuxmusl-arm64` | 1.3.4 | LGPL-3.0-or-later |
+| `@img/sharp-linux-arm` | 0.35.5 | Apache-2.0 |
+| `@img/sharp-linux-arm64` | 0.35.5 | Apache-2.0 |
+| `@img/sharp-linux-ppc64` | 0.35.5 | Apache-2.0 |
+| `@img/sharp-linux-riscv64` | 0.35.5 | Apache-2.0 |
+| `@img/sharp-linux-s390x` | 0.35.5 | Apache-2.0 |
+| `@img/sharp-linuxmusl-arm64` | 0.35.5 | Apache-2.0 |
+| `@img/sharp-webcontainers-wasm32` | 0.35.5 | Apache-2.0 |
+| `@img/sharp-win32-arm64` | 0.35.5 | Apache-2.0 AND LGPL-3.0-or-later |
+| `@img/sharp-win32-ia32` | 0.35.5 | Apache-2.0 AND LGPL-3.0-or-later |
+| `@img/sharp-win32-x64` | 0.35.5 | Apache-2.0 AND LGPL-3.0-or-later |
+| `fsevents` | 2.3.3 | MIT |

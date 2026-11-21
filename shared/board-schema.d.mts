@@ -1,0 +1,25 @@
+export type ReferenceContext = { vaultId: string; restoreGeneration: string; epoch: string };
+export type BoardAsset = { sha256: string; mimeType: 'image/png'|'image/jpeg'|'image/webp'; byteLength: number; width:number; height:number };
+export type NoteBinding = { state:'bound'|'missing'|'unbound'; path:string; fragment?:string };
+export type CardMetadata = { version:1; kind:'note-card'; binding:NoteBinding };
+export type BoardElement = Record<string, any> & { id:string; type:string; x:number; y:number; width:number; height:number; angle:number; customData?:{notesprig?:CardMetadata;[key:string]:unknown}; isDeleted?:boolean };
+export type BoardDocument = { type:'notesprig-board'; schemaVersion:1; boardId:string; referenceContext:ReferenceContext; scene:{elements:BoardElement[];appState:Record<string,unknown>};assets:Record<string,BoardAsset>;extensions:Record<string,unknown>;[key:string]:unknown };
+export const BOARD_LIMITS:Readonly<Record<'bytes'|'elements'|'cards'|'assets'|'assetBytes'|'totalAssetBytes'|'pixels'|'dimension'|'pointsPerElement'|'points'|'textPerElement'|'totalText'|'depth'|'nodes',number>>;
+export const MANAGED_ASSET_ROOT:string;
+export const CARD_PREFIX:string;
+export class BoardError extends Error { code:string;status:number;detail:Record<string,unknown>;constructor(message:string,code?:string,status?:number,detail?:Record<string,unknown>); }
+export function utf8Bytes(text:string):number;
+export function validVaultPath(path:unknown):path is string;
+export function isManagedPath(path:string):boolean;
+export function protectsManagedPath(path:string):boolean;
+export function validContext(context:unknown):context is ReferenceContext;
+export function sameContext(a:unknown,b:unknown):boolean;
+export function sameWorkspace(a:ReferenceContext,b:ReferenceContext):boolean;
+export function boardScope(context:ReferenceContext):string;
+export function cardMetadata(element:any):CardMetadata|null;
+export function boardCards(board:BoardDocument,includeDeleted?:boolean):BoardElement[];
+export function persistedAppearance(state?:Record<string,unknown>):Record<string,unknown>;
+export function createBoard(context:ReferenceContext,boardId?:string):BoardDocument;
+export function validateBoard(input:unknown):BoardDocument;
+export function canonicalJSON(value:unknown):string;
+export function boardFingerprint(board:BoardDocument):string;
