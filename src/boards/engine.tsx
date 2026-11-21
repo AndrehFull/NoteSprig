@@ -55,6 +55,10 @@ export function webEmbedUrl(link: unknown): string | null {
   const candidate = /^[a-z][a-z\d+.-]*:/i.test(value) ? value : /^[\w-]+(\.[\w-]+)+(:\d+)?([/?#].*)?$/.test(value) ? `https://${value}` : '';
   try { const url = new URL(candidate); return url.protocol === 'https:' ? url.href : null; } catch { return null; }
 }
+/** Text fields (link editor, text editing) handle the clipboard themselves; only canvas-level transfer is guarded. */
+function editableTarget(target: EventTarget | null) { return target instanceof Element && Boolean(target.closest('input, textarea, [contenteditable="true"]')); }
+/** A single pasted web address may create an embed; files, scenes, and other content still require reviewed import. */
+function pastedWebAddress(data: DataTransfer | null) { if (!data || data.files.length) return false; const text = data.getData('text/plain').trim(); return Boolean(text) && !/\s/.test(text) && Boolean(webEmbedUrl(text)); }
 function safeCard(element: ExcalidrawElement) {
   const metadata = cardMetadata(element);
   return metadata && metadata.binding && ['bound', 'missing', 'unbound'].includes(metadata.binding.state) && validVaultPath(metadata.binding.path) && /\.md$/i.test(metadata.binding.path) ? metadata : null;
@@ -108,13 +112,15 @@ export function BoardEngine(props: BoardEngineProps) {
   return <div data-board-engine="" style={{ width: '100%', height: '100%' }}
     onDragOverCapture={(event) => { event.preventDefault(); event.stopPropagation(); }}
     onDropCapture={(event) => { event.preventDefault(); event.stopPropagation(); blocked(); }}
-    onPasteCapture={(event) => { event.preventDefault(); event.stopPropagation(); blocked(); }}
-    onCopyCapture={(event) => { event.preventDefault(); event.stopPropagation(); blocked(); }}
-    onCutCapture={(event) => { event.preventDefault(); event.stopPropagation(); blocked(); }}
+    onPasteCapture={(event) => { if (editableTarget(event.target) || pastedWebAddress(event.clipboardData)) return; event.preventDefault(); event.stopPropagation(); blocked(); }}
+    onCopyCapture={(event) => { if (editableTarget(event.target)) return; event.preventDefault(); event.stopPropagation(); blocked(); }}
+    onCutCapture={(event) => { if (editableTarget(event.target)) return; event.preventDefault(); event.stopPropagation(); blocked(); }}
     onContextMenuCapture={(event) => { event.preventDefault(); event.stopPropagation(); blocked(); }}
     onKeyDownCapture={(event) => {
       const key = event.key.toLowerCase();
       if ((event.ctrlKey || event.metaKey) && key === 's' && !event.shiftKey) { event.preventDefault(); event.stopPropagation(); if (latest.current.onSaveRequest) latest.current.onSaveRequest(); else blocked(); return; }
+      // Ctrl+V reaches the paste guard above; clipboard keys inside text fields behave normally.
+      if (['v', 'c', 'x'].includes(key) && (key === 'v' || editableTarget(event.target))) return;
       if (((event.ctrlKey || event.metaKey) && ['o', 's', 'v', 'c', 'x', 'e'].includes(key)) || (event.altKey && event.shiftKey && key === 'c')) { event.preventDefault(); event.stopPropagation(); blocked(); }
     }}>
     <Excalidraw key={`${props.documentKey}:${props.renderKey || ''}`} initialData={{ elements: props.initialScene.elements, appState: { ...props.initialScene.appState, frameRendering: { enabled: true, name: true, outline: true, clip: false } }, files: props.files }}
@@ -129,7 +135,7 @@ export function BoardEngine(props: BoardEngineProps) {
       }}
       handleKeyboardGlobally={false} autoFocus={false} aiEnabled={false} theme={props.theme} langCode={language}
       viewModeEnabled={props.readOnly} UIOptions={{ canvasActions: { loadScene: false, saveToActiveFile: false, export: false, saveAsImage: false, toggleTheme: false }, tools: { image: false } }}
-      onPaste={() => { blocked(); return false; }}
+      onPaste={(data) => { const text = typeof data.text === 'string' ? data.text.trim() : ''; if (!data.elements?.length && !data.files && !data.mixedContent && !data.spreadsheet && text && !/\s/.test(text) && webEmbedUrl(text)) return true; blocked(); return false; }}
       validateEmbeddable={(link) => { if (webEmbedUrl(link)) return true; if (typeof link === 'string' && !markerKey(link) && !link.includes(CARD_PREFIX.slice(0, -1))) return true; const key = markerKey(link); const current = engineApi.current?.getSceneElementsIncludingDeleted() ?? elements.current; return Boolean(key && current.some((element) => !element.isDeleted && safeCard(element) && markerKey(element.link) === key)); }}
       renderEmbeddable={renderCard}
       onLinkOpen={(element, event) => { event.preventDefault(); if (safeCard(element) && markerKey(element.link)) { latest.current.onOpenCard?.(element.id); return; } const web = webEmbedUrl(element.link); if (web) window.open(web, '_blank', 'noopener,noreferrer'); }}

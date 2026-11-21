@@ -121,3 +121,50 @@ test('typing a bare domain into the Web Embed tool neither freezes nor shows the
     await page.request.delete(`/api/note?path=${encodeURIComponent(name+'.board')}`,{headers:{'Content-Type':'application/json'}});
   }
 });
+
+test('clipboard: links paste into the link editor and onto the canvas, while other content stays guarded', async({page,context})=>{
+  test.setTimeout(90000);
+  await context.grantPermissions(['clipboard-read','clipboard-write']);
+  await page.request.post('/api/login',{data:{password:'test-session-only'}});
+  await page.addInitScript(()=>localStorage.setItem('notesprig.language','en'));
+  await page.route(/wikipedia\.org/, route=>route.fulfill({status:200,contentType:'text/html',body:'<p>stub</p>'}));
+  const name=`Paste-${randomUUID().slice(0,8)}`, path=name+'.board';
+  const clip=(text:string)=>page.evaluate(value=>navigator.clipboard.writeText(value),text);
+  const elements=async()=>page.evaluate(()=>document.querySelectorAll('.excalidraw iframe, [data-board-web-embed]').length);
+  try {
+    await page.goto('/');
+    await page.getByRole('button',{name:'New Canvas',exact:true}).first().click();
+    await page.getByRole('textbox',{name:'Canvas name',exact:true}).fill(name);
+    await page.getByRole('textbox',{name:'Canvas name',exact:true}).press('Enter');
+    const canvas=page.locator('.excalidraw__canvas.interactive'); await canvas.waitFor();
+    const box=(await canvas.boundingBox())!;
+    // 1. Paste into the Web Embed link editor.
+    await page.locator('.App-toolbar .dropdown-menu-button').click();
+    await page.getByText('Web Embed',{exact:false}).first().click();
+    await page.mouse.move(box.x+260,box.y+120); await page.mouse.down(); await page.mouse.move(box.x+520,box.y+240,{steps:6}); await page.mouse.up();
+    const input=page.locator('.excalidraw-hyperlinkContainer-input'); await input.waitFor();
+    await clip('https://pt.wikipedia.org/wiki/Brasil');
+    await input.press('Control+v');
+    await expect(input).toHaveValue('https://pt.wikipedia.org/wiki/Brasil');
+    await input.press('Enter');
+    await expect(page.locator('.excalidraw iframe[src="https://pt.wikipedia.org/wiki/Brasil"]')).toHaveCount(1);
+    await expect(page.locator('.Toast')).toHaveCount(0);
+    // 2. Paste a link directly onto the canvas: it becomes an embed.
+    await page.mouse.click(box.x+600,box.y+500);
+    await clip('https://en.wikipedia.org/wiki/Note-taking');
+    await page.keyboard.press('Control+v');
+    await expect(page.locator('.excalidraw iframe[src="https://en.wikipedia.org/wiki/Note-taking"]')).toHaveCount(1);
+    // 3. Other text pasted onto the canvas is still guarded.
+    const before=await elements();
+    await page.mouse.click(box.x+600,box.y+560);
+    await clip('plain words are not imported');
+    await page.keyboard.press('Control+v');
+    await expect(page.getByText('Use the NoteSprig toolbar to import files.',{exact:false}).first()).toBeVisible();
+    expect(await elements()).toBe(before);
+    const saved=async()=>JSON.parse((await(await page.request.get(`/api/note?path=${encodeURIComponent(path)}`)).json()).content).scene.elements.filter((e:any)=>!e.isDeleted&&e.type==='text').length;
+    await page.getByRole('button',{name:'Save',exact:true}).click();
+    await expect.poll(saved).toBe(0);
+  } finally {
+    await page.request.delete(`/api/note?path=${encodeURIComponent(path)}`,{headers:{'Content-Type':'application/json'}});
+  }
+});

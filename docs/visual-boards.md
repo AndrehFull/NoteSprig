@@ -16,7 +16,7 @@ The global graph can display a board's verified **contains** links when attachme
 
 ## Web embeds
 
-The **Web Embed** tool accepts any `https` URL. It renders in the drawing engine's sandboxed iframe; sites that refuse framing show their own error. Loading an embed contacts that site from your browser each time the Canvas is opened, so it can see that visit. Offline, an embed shows a labeled placeholder with its URL. The ↗ link icon opens the page in a new tab. Shared `.excalidraw`, PNG, and SVG exports turn embeds into link cards.
+The **Web Embed** tool accepts any `https` URL. It renders in the drawing engine's sandboxed iframe; sites that refuse framing show their own error. Loading an embed contacts that site from your browser each time the Canvas is opened, so it can see that visit. Offline, an embed shows a labeled placeholder with its URL. The ↗ link icon opens the page in a new tab. You can paste into the link field, or paste a single web address directly onto the Canvas to create an embed. Other pasted content (files, drawings, plain text) still goes through **Import as a copy**; copy and cut work inside text fields but not for canvas selections, which can carry private note references. Shared `.excalidraw`, PNG, and SVG exports turn embeds into link cards.
 
 ## Save and recovery states
 
