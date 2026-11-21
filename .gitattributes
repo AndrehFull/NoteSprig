@@ -7,4 +7,7 @@
 *.woff2 binary
 *.ttf binary
 # Preserve upstream license texts verbatim, including their whitespace.
-docs/legal/THIRD_PARTY_LICENSES.txt -whitespace
+docs/legal/THIRD_PARTY_LICENSES.txt -text -whitespace
+# Upstream font licenses are checksum-verified at build time; keep their bytes (including CRLF) unchanged.
+docs/legal/board-fonts/** -text -whitespace
+docs/legal/supplemental/** -text -whitespace
