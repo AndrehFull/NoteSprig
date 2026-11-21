@@ -227,5 +227,6 @@ function conversionDescription(code:string) {
     'unused-image-omitted':t('Unused images are omitted.'),
     'invalid-binding-removed':t('Invalid drawing bindings are removed.'),
     'frame-clipping-disabled':t('Organizational frames do not clip contents.'),
+    'web-embed-link':t('Web embeds are exported as link cards.'),
   };return descriptions[code]||t('Review converted styles and layout.');
 }

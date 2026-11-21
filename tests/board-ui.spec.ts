@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
+import { createBoard } from '../shared/board-schema.mjs';
 
 test('New Canvas creates an Excalidraw board that persists note cards and opens a guarded side editor', async({page})=>{
   test.setTimeout(90000);
@@ -49,5 +50,27 @@ test('legacy .canvas files stay editable and convert to a new Canvas copy withou
     expect((await(await page.request.get(`/api/note?path=${encodeURIComponent(name+'.canvas')}`)).json()).content).toBe(source);
   } finally {
     for(const path of [name+'.canvas',name+'.board'])await page.request.delete(`/api/note?path=${encodeURIComponent(path)}`,{headers:{'Content-Type':'application/json'}});
+  }
+});
+
+test('https web embeds render in a sandboxed iframe and are saved with the Canvas', async({page})=>{
+  test.setTimeout(60000);
+  await page.request.post('/api/login',{data:{password:'test-session-only'}});
+  const name=`Embed-${randomUUID().slice(0,8)}`, path=name+'.board', url='https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+  const context=await(await page.request.get('/api/boards/context')).json();
+  const board=createBoard(context);
+  board.scene.elements=[{id:'web',type:'embeddable',x:40,y:40,width:480,height:270,angle:0,link:url} as any];
+  expect((await page.request.post('/api/boards',{data:{path,board,context}})).ok()).toBe(true);
+  await page.route(/youtube/, route=>route.fulfill({status:200,contentType:'text/html',body:'<p>stub</p>'}));
+  try {
+    await page.goto('/');
+    await page.locator(`button.tree-file[title="${path}"]`).click();
+    const frame=page.locator('.excalidraw iframe');
+    await expect(frame).toHaveCount(1);
+    await expect(frame).toHaveAttribute('src',/youtube/);
+    await expect(frame).toHaveAttribute('sandbox',/allow-scripts/);
+    expect(page.getByText('Embedding this url is currently not allowed',{exact:false})).toHaveCount(0);
+  } finally {
+    await page.request.delete(`/api/note?path=${encodeURIComponent(path)}`,{headers:{'Content-Type':'application/json'}});
   }
 });

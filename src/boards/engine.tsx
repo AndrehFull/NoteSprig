@@ -47,6 +47,11 @@ function markerKey(link: unknown): string | null {
     return url.origin === window.location.origin && !url.search && !url.hash && new RegExp(`^${CARD_PREFIX}[a-f\\d]{8}-[a-f\\d]{4}-[a-f\\d]{4}-[a-f\\d]{4}-[a-f\\d]{12}$`, 'i').test(url.pathname) ? url.pathname : null;
   } catch { return null; }
 }
+/** External web embeds: any https URL that is not a NoteSprig card marker. */
+export function webEmbedUrl(link: unknown): string | null {
+  if (typeof link !== 'string' || link.length > 2048 || markerKey(link)) return null;
+  try { const url = new URL(link); return url.protocol === 'https:' ? url.href : null; } catch { return null; }
+}
 function safeCard(element: ExcalidrawElement) {
   const metadata = cardMetadata(element);
   return metadata && metadata.binding && ['bound', 'missing', 'unbound'].includes(metadata.binding.state) && validVaultPath(metadata.binding.path) && /\.md$/i.test(metadata.binding.path) ? metadata : null;
@@ -74,6 +79,12 @@ export function BoardEngine(props: BoardEngineProps) {
   const blocked = () => latest.current.onBlockedIngress?.();
   const renderCard = (element: ExcalidrawEmbeddableElement) => {
     const metadata = safeCard(element);
+    const web = !metadata && webEmbedUrl(element.link);
+    // Online web embeds use the engine's sandboxed iframe (null); offline they get a labeled placeholder.
+    if (web && navigator.onLine) return null;
+    if (web) return <article aria-label={t('Web embed')} data-board-web-embed={element.id} style={{ boxSizing: 'border-box', width: '100%', height: '100%', padding: 14, overflow: 'hidden', overflowWrap: 'anywhere', background: latest.current.theme === 'dark' ? '#26282d' : '#fff', color: latest.current.theme === 'dark' ? '#eee' : '#202124', font: '14px/1.45 system-ui' }}>
+      <strong style={{ display: 'block', marginBottom: 10 }}>{t('Web embed unavailable offline')}</strong><div>{web}</div>
+    </article>;
     const preview = latest.current.visibleCardIds && !latest.current.visibleCardIds.includes(element.id) ? undefined : latest.current.previews[element.id];
     const eligible = metadata && markerKey(element.link);
     const status = !eligible || metadata.binding.state === 'unbound' ? 'unbound' : metadata.binding.state === 'missing' ? 'missing' : preview?.status ?? 'unavailable';
@@ -112,9 +123,9 @@ export function BoardEngine(props: BoardEngineProps) {
       handleKeyboardGlobally={false} autoFocus={false} aiEnabled={false} theme={props.theme} langCode={language}
       viewModeEnabled={props.readOnly} UIOptions={{ canvasActions: { loadScene: false, saveToActiveFile: false, export: false, saveAsImage: false, toggleTheme: false }, tools: { image: false } }}
       onPaste={() => { blocked(); return false; }}
-      validateEmbeddable={(link) => { const key = markerKey(link); const current = engineApi.current?.getSceneElementsIncludingDeleted() ?? elements.current; return Boolean(key && current.some((element) => !element.isDeleted && safeCard(element) && markerKey(element.link) === key)); }}
+      validateEmbeddable={(link) => { if (webEmbedUrl(link)) return true; const key = markerKey(link); const current = engineApi.current?.getSceneElementsIncludingDeleted() ?? elements.current; return Boolean(key && current.some((element) => !element.isDeleted && safeCard(element) && markerKey(element.link) === key)); }}
       renderEmbeddable={renderCard}
-      onLinkOpen={(element, event) => { event.preventDefault(); if (safeCard(element) && markerKey(element.link)) latest.current.onOpenCard?.(element.id); }}
+      onLinkOpen={(element, event) => { event.preventDefault(); if (safeCard(element) && markerKey(element.link)) { latest.current.onOpenCard?.(element.id); return; } const web = webEmbedUrl(element.link); if (web) window.open(web, '_blank', 'noopener,noreferrer'); }}
       onChange={(next, state) => {
         elements.current = next;
         const view = { scrollX: state.scrollX, scrollY: state.scrollY, width: state.width, height: state.height, zoom: state.zoom.value };

@@ -14,6 +14,10 @@ The note list provides keyboard access to locating and opening cards. Excerpts r
 
 The global graph can display a board's verified **contains** links when attachments are enabled. Multiple cards for one note produce one derived graph connection. Stale, unbound, and deleted cards do not create active connections.
 
+## Web embeds
+
+The **Web Embed** tool accepts any `https` URL. It renders in the drawing engine's sandboxed iframe; sites that refuse framing show their own error. Loading an embed contacts that site from your browser each time the Canvas is opened, so it can see that visit. Offline, an embed shows a labeled placeholder with its URL. The ↗ link icon opens the page in a new tab. Shared `.excalidraw`, PNG, and SVG exports turn embeds into link cards.
+
 ## Save and recovery states
 
 - **Saving on this device…** means an IndexedDB checkpoint is pending.

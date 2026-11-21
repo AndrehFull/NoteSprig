@@ -55,8 +55,8 @@ test('native bindings, rotation, opacity, frame membership and groups survive wi
 test('missing, unbound, stale, unavailable and unknown cards use localized visible placeholders', () => {
   const source = [card('missing', { customData: { notesprig: { version: 1, kind: 'note-card', binding: { state: 'missing', path: privatePath } } } }), card('unbound', { customData: { notesprig: { version: 1, kind: 'note-card', binding: { state: 'unbound', path: privatePath } } } }), card('stale'), card('unavailable'), element('foreign', 'embeddable', { link: 'https://example.com/embed' })];
   const result = createSharingProjection({ elements: source }, { stale: { title: 'Must not leak stale text', excerpt: privatePath, status: 'stale' }, missing: { title: 'Must not use missing snapshot', excerpt: privatePath, status: 'ready' } }, { labels: { missing: 'Nota ausente', unbound: 'Nota sem vínculo', stale: 'Revisão necessária', unavailable: 'Prévia indisponível', unsupported: 'Conteúdo incompatível' } });
-  expect(result.elements.filter((item) => item.type === 'text').map((item) => item.type === 'text' && item.text)).toEqual(['Nota ausente', 'Nota sem vínculo', 'Revisão necessária', 'Prévia indisponível', 'Conteúdo incompatível']);
-  expect(result.report).toMatchObject({ noteCards: 4, placeholders: 5 });
+  expect(result.elements.filter((item) => item.type === 'text').map((item) => item.type === 'text' && item.text)).toEqual(['Nota ausente', 'Nota sem vínculo', 'Revisão necessária', 'Prévia indisponível', 'https://example.com/embed']);
+  expect(result.report).toMatchObject({ noteCards: 4, placeholders: 4 });
   expect(JSON.stringify(result)).not.toContain(privatePath);
   expect(JSON.stringify(result)).not.toContain('Must not');
 });
@@ -111,4 +111,15 @@ test('bounded projections reject complexity overflow and report snapshot truncat
   expect(result.report.truncatedSnapshots).toBe(1);
   expect(result.report.issues).toContainEqual({ code: 'snapshot-truncated', elementId: 'card' });
   expect(result.elements.find((item) => item.type === 'text')?.type).toBe('text');
+});
+
+test('web embeds export as clickable link cards instead of unsupported placeholders', () => {
+  const url = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+  const output = createSharingProjection({ elements: [element('web', 'embeddable', { link: url })], appState: {}, files: {} }, {});
+  expect(output.elements).toHaveLength(2);
+  expect(output.elements[0]).toMatchObject({ id: 'web', type: 'rectangle', link: url });
+  expect(output.elements[1]).toMatchObject({ type: 'text', containerId: 'web' });
+  expect(String((output.elements[1] as { text?: string }).text).replace(/\n/g, '')).toBe(url); // wrapped to fit the card
+  expect(output.elements.some((item) => item.type === 'embeddable')).toBe(false);
+  expect(output.report.issues).toContainEqual({ code: 'web-embed-link', elementId: 'web' });
 });

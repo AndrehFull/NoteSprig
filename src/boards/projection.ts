@@ -5,7 +5,7 @@ import { BOARD_LIMITS } from '../../shared/board-schema.mjs';
 export type NoteSnapshotStatus = 'ready' | 'missing' | 'unbound' | 'stale' | 'unavailable';
 export type NoteCardSnapshot = Readonly<{ title: string; excerpt: string; status: NoteSnapshotStatus; revision?: string }>;
 export type ProjectionLabels = Readonly<{ missing: string; unbound: string; stale: string; unavailable: string; untitled: string; unsupported: string }>;
-export type ProjectionIssueCode = 'static-note-snapshot' | 'note-placeholder' | 'snapshot-truncated' | 'unsupported-element-placeholder' | 'missing-image-placeholder' | 'private-metadata-stripped' | 'deleted-element-omitted' | 'unused-image-omitted' | 'invalid-binding-removed' | 'frame-clipping-disabled';
+export type ProjectionIssueCode = 'static-note-snapshot' | 'note-placeholder' | 'snapshot-truncated' | 'unsupported-element-placeholder' | 'missing-image-placeholder' | 'private-metadata-stripped' | 'deleted-element-omitted' | 'unused-image-omitted' | 'invalid-binding-removed' | 'frame-clipping-disabled' | 'web-embed-link';
 export type ProjectionIssue = Readonly<{ code: ProjectionIssueCode; elementId?: string }>;
 export type ExportPrivacyContract = Readonly<{ kind: 'share-static' | 'private-native'; containsLiveReferences: boolean; containsReferenceContext: boolean; containsVisibleNoteText: boolean; requiresDisclosure: boolean }>;
 
@@ -179,6 +179,10 @@ export function createSharingProjection(
       if (status === 'ready') card(source, `${cleanText(snapshot.title, maxSnapshot).trim() || messages.untitled}\n\n${cleanText(snapshot.excerpt, maxSnapshot)}`, 'static-note-snapshot');
       else { placeholders++; card(source, messages[status], 'note-placeholder'); }
       continue;
+    }
+    if (item.type === 'embeddable' && !metadata) {
+      const url = safePublicLink(source.link);
+      if (url) { card(source, url, 'web-embed-link'); elements[elements.length - 2].link = url; continue; }
     }
     if (!nativeTypes.has(item.type)) { placeholders++; card(source, messages.unsupported, 'unsupported-element-placeholder'); continue; }
     if (item.type === 'image') {
