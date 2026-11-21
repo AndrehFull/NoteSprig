@@ -33,7 +33,7 @@ test.afterAll(async () => { server?.closeAllConnections(); await new Promise<voi
 test('production shell defers the drawing engine and verifies complete feature dependencies before offline reopening', async ({ page }) => {
   test.setTimeout(120000);
   await page.request.post(`${origin}/api/login`, { data: { password: 'test-session-only' } });
-  await page.addInitScript(() => { localStorage.setItem('notesprig.boardsEnabled', 'true'); localStorage.setItem('notesprig.language', 'en'); });
+  await page.addInitScript(() => { localStorage.setItem('notesprig.language', 'en'); });
   const externalResponses: string[] = [];
   page.on('response', (response) => { if (/^https?:/.test(response.url()) && new URL(response.url()).origin !== origin) externalResponses.push(response.url()); });
   await page.goto(origin);
@@ -51,10 +51,10 @@ test('production shell defers the drawing engine and verifies complete feature d
   expect(shellUrls.some((url) => url.startsWith('/board-assets/'))).toBe(false);
   const name = `Offline-${randomUUID().slice(0, 8)}`;
   try {
-  await page.getByRole('button', { name: 'New visual board', exact: true }).click();
-  await page.getByRole('textbox', { name: 'Board name', exact: true }).fill(name);
-  await page.getByRole('textbox', { name: 'Board name', exact: true }).press('Enter');
-  await expect(page.getByRole('region', { name: 'Visual board', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'New Canvas', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Canvas name', exact: true }).fill(name);
+  await page.getByRole('textbox', { name: 'Canvas name', exact: true }).press('Enter');
+  await expect(page.getByRole('region', { name: 'Canvas', exact: true })).toBeVisible();
   await page.getByRole('combobox', { name: 'Choose a note', exact: true }).selectOption('Index.md');
   await page.getByRole('button', { name: 'Add', exact: true }).click();
   await expect(page.locator('[data-board-card]')).toContainText('Início');
@@ -63,7 +63,7 @@ test('production shell defers the drawing engine and verifies complete feature d
   expect(manifest.assets.filter((asset: { url: string }) => !cachedAssets.includes(asset.url)).map((asset: { url: string }) => asset.url)).toEqual([]);
   await page.context().setOffline(true);
   await page.reload();
-  await expect(page.getByRole('region', { name: 'Visual board', exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Canvas', exact: true })).toBeVisible();
   await expect(page.locator('.excalidraw__canvas.interactive')).toBeVisible();
   await expect(page.locator('iframe')).toHaveCount(0);
   expect(externalResponses).toEqual([]);

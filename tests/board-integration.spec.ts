@@ -9,11 +9,11 @@ import { buildKnowledgeGraph } from '../src/knowledge';
 const unique = () => 'Integration-' + randomUUID().slice(0, 8);
 async function login(page: Page) {
   const response = await page.request.post('/api/login', { data: { password: 'test-session-only' } }); expect(response.ok()).toBe(true);
-  await page.addInitScript(() => { localStorage.setItem('notesprig.language', 'en'); localStorage.setItem('notesprig.boardsEnabled', 'true'); });
+  await page.addInitScript(() => { localStorage.setItem('notesprig.language', 'en'); });
 }
 async function context(api: APIRequestContext): Promise<ReferenceContext> { const response = await api.get('/api/boards/context'); expect(response.ok()).toBe(true); return response.json(); }
 async function createEmpty(api: APIRequestContext, path: string) { const expected = await context(api); const response = await api.post('/api/boards', { data: { path, board: createBoard(expected), context: expected } }); expect(response.ok()).toBe(true); }
-async function openBoard(page: Page, path: string) { await page.goto('/'); await page.locator(`button.tree-file[title="${path}"]`).click(); await expect(page.getByRole('region', { name: 'Visual board', exact: true })).toBeVisible(); }
+async function openBoard(page: Page, path: string) { await page.goto('/'); await page.locator(`button.tree-file[title="${path}"]`).click(); await expect(page.getByRole('region', { name: 'Canvas', exact: true })).toBeVisible(); }
 async function content(api: APIRequestContext, path: string) { const response = await api.get('/api/note?path=' + encodeURIComponent(path)); expect(response.ok()).toBe(true); return response.json(); }
 async function bytes(download: Download) { const file = await download.path(); expect(file).toBeTruthy(); return readFile(file!); }
 async function cleanup(api: APIRequestContext, paths: string[]) { for (const path of paths) await api.delete('/api/note?path=' + encodeURIComponent(path), { headers: { 'Content-Type': 'application/json' } }); }
@@ -59,7 +59,7 @@ test('Canvas imports remain unbound until explicit review and private versus pub
     await openBoard(page, hostPath);
     await page.locator('input[accept=".canvas,.excalidraw,.board,.zip"]').setInputFiles({ name: 'Original.canvas', mimeType: 'application/json', buffer: Buffer.from(source) });
     await expect(page.getByRole('heading', { name: 'Review imported copy', exact: true })).toBeVisible();
-    await page.getByRole('textbox', { name: 'Imported board name', exact: true }).fill(name + '-copy');
+    await page.getByRole('textbox', { name: 'Imported Canvas name', exact: true }).fill(name + '-copy');
     const originalDownload = page.waitForEvent('download'); await page.getByRole('button', { name: 'Create imported copy', exact: true }).click();
     expect((await bytes(await originalDownload)).toString()).toBe(source);
     const imported = JSON.parse((await content(request, copyPath)).content); expect(imported.scene.elements[0].customData.notesprig.binding.state).toBe('unbound'); expect(imported.extensions.canvasSource).toBe(source);

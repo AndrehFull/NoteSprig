@@ -12,7 +12,7 @@
 
 ![Workspace do NoteSprig com notas conectadas no grafo global](docs/screenshots/graph.pt-BR.png)
 
-O NoteSprig reúne notas Markdown, um grafo de conhecimento, quadros visuais e visualizações estruturadas no navegador. Mantenha seus arquivos no seu servidor e acesse pelo computador ou celular.
+O NoteSprig reúne notas Markdown, um grafo de conhecimento, um Canvas visual e visualizações estruturadas no navegador. Mantenha seus arquivos no seu servidor e acesse pelo computador ou celular.
 
 **Status:** em desenvolvimento inicial. A interface está disponível em **inglês** e **português do Brasil**. A integração com IA está planejada e ainda não faz parte desta versão.
 
@@ -20,13 +20,13 @@ O NoteSprig reúne notas Markdown, um grafo de conhecimento, quadros visuais e v
 
 - **Notas conectadas:** wikilinks, links Markdown relativos, aliases, backlinks, referências a títulos e blocos, tags e busca.
 - **Editor Markdown:** modo fonte, Live Preview e leitura, com propriedades, tarefas, tabelas, callouts, código destacado, fórmulas e diagramas Mermaid.
-- **Pensamento visual:** grafos global e local com filtros e controles de forças; Canvas com cartões, grupos e conexões.
+- **Pensamento visual:** grafos global e local com filtros e controles de forças; Canvas com Excalidraw que reúne desenhos, imagens e cartões de notas, com rascunhos offline e recuperação privada.
 - **Visualizações estruturadas:** tabelas, listas, cartões e Kanban definidos em YAML, com filtros e fórmulas.
 - **Workspace flexível:** pastas, favoritos, abas fixadas, painéis divididos, templates e notas diárias.
 - **Recuperação e portabilidade:** histórico, lixeira, tratamento de conflitos, importação e exportação de pastas/ZIP e backups criptografados.
 - **Acesso em vários dispositivos:** layout responsivo, PWA instalável e rascunhos locais para edição offline após um primeiro acesso conectado.
 
-O vault utiliza Markdown, JSON Canvas, YAML Bases e arquivos comuns de anexos. Não é necessário configurar um banco de dados externo.
+O vault utiliza Markdown, Canvas (`.board`, com suporte aos `.canvas` antigos), YAML Bases e arquivos comuns de anexos. Não é necessário configurar um banco de dados externo.
 
 <details>
 <summary>Mais capturas</summary>
@@ -99,7 +99,7 @@ O GitHub hospeda o código. O GitHub Pages não executa a API Node nem armazena 
 - O layout oferece dois grupos de painéis. A exportação do Canvas é esquemática, e as visualizações estruturadas implementam um subconjunto de fórmulas e layouts.
 - Plugins externos não são executados. Clientes nativos e funcionalidades de IA ainda não estão disponíveis.
 
-Consulte o [guia de uso](docs/user-guide.md) e o [roadmap](docs/roadmap.md). Os quadros visuais com Excalidraw estão disponíveis de forma experimental em **Configurações → Ativar quadros visuais experimentais**. Consulte o [guia dos quadros visuais](docs/visual-boards.md), em inglês, e o [plano de validação](docs/design/unified-canvas-validation.md). Os testes em aparelhos físicos, leitores de tela e quadros grandes ainda precisam ser concluídos.
+Consulte o [guia de uso](docs/user-guide.md) e o [roadmap](docs/roadmap.md). Use **Novo Canvas** para criar um Canvas com Excalidraw; arquivos `.canvas` antigos podem ser convertidos em uma cópia. Consulte o [guia do Canvas](docs/visual-boards.md), em inglês, e o [plano de validação](docs/design/unified-canvas-validation.md). Os testes em aparelhos físicos, leitores de tela e Canvas grandes ainda precisam ser concluídos.
 
 ## Desenvolvimento e verificações
 

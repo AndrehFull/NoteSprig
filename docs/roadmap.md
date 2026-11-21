@@ -13,9 +13,9 @@ The workspace includes linked Markdown notes, graphs, Canvas, structured views, 
 - Improve onboarding and expand language coverage based on community contributions.
 - Expand regression coverage around document formats and interrupted operations.
 
-## Experimental unified visual boards
+## Unified Canvas
 
-A [reviewed implementation plan](design/unified-canvas.md) defines a single visual board combining an Excalidraw drawing engine with live NoteSprig note references. It includes [prototype/release gates](design/unified-canvas-validation.md) and an [independent review record](design/unified-canvas-review.md). An opt-in implementation now embeds Excalidraw for drawing and passive note cards, with guarded references, scoped local checkpoints, managed images, import/export, and private recovery. See the [visual board guide](visual-boards.md). Automated feasibility tests are implemented; physical device, assistive technology, sustained performance, and destructive filesystem validation remain release gates. Existing Canvas files remain supported. Project workflow templates and explicit relationship provenance follow the core release.
+A [reviewed implementation plan](design/unified-canvas.md) defines a single visual board combining an Excalidraw drawing engine with live NoteSprig note references. It includes [prototype/release gates](design/unified-canvas-validation.md) and an [independent review record](design/unified-canvas-review.md). The Canvas now embeds Excalidraw for drawing and passive note cards, with guarded references, scoped local checkpoints, managed images, import/export, and private recovery. It replaces the legacy JSON Canvas editor for new documents; see the [Canvas guide](visual-boards.md). Automated feasibility tests are implemented; physical device, assistive technology, sustained performance, and destructive filesystem validation remain release gates. Existing `.canvas` files remain editable and can be converted to a separate copy. Project workflow templates and explicit relationship provenance follow the core release.
 
 ## Planned AI integration
 

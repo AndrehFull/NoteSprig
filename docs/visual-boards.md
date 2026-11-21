@@ -1,8 +1,10 @@
-# Experimental visual boards
+# Canvas
 
-NoteSprig can combine freehand drawing, shapes, arrows, images, and live Markdown note cards on one Excalidraw surface. Enable **Settings → Enable experimental visual boards**, then choose **New visual board**. The existing JSON Canvas editor remains available.
+A NoteSprig Canvas combines freehand drawing, shapes, arrows, images, and live Markdown note cards on one Excalidraw surface. Choose **New Canvas** from the toolbar, a folder's context menu, or the command palette. New canvases are saved as `.board` files.
 
-This feature is opt-in while the release checks described in the [validation plan](design/unified-canvas-validation.md) are completed. Automated browser checks do not establish physical phone, tablet, screen reader, or large-board performance compatibility.
+Older `.canvas` (JSON Canvas) files still open in the legacy editor, which shows **Convert to new Canvas**. Conversion creates a separate `.board` copy and never changes the original file; note references in the copy stay unbound until you review them.
+
+Some release checks in the [validation plan](design/unified-canvas-validation.md) remain open. Automated browser checks do not establish physical phone, tablet, screen reader, or large-board performance compatibility.
 
 ## Drawing and note cards
 

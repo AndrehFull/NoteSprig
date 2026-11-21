@@ -38,7 +38,7 @@ The graph draws relationships from actual links in your files. Notes without lin
 
 Markdown supports source mode, live preview, and reading mode. Properties use YAML frontmatter. Templates and configurable daily notes are available from the command palette.
 
-A `.canvas` file stores cards, groups, and connections as JSON. Unknown JSON fields are preserved. Canvas URLs open externally; file cards open their referenced note for editing. PNG export is schematic and does not fully render all media.
+**New Canvas** creates an Excalidraw-based `.board`; see the [Canvas guide](visual-boards.md). Older `.canvas` files open in the legacy editor with a **Convert to new Canvas** option. A `.canvas` file stores cards, groups, and connections as JSON. Unknown JSON fields are preserved. Canvas URLs open externally; file cards open their referenced note for editing. PNG export is schematic and does not fully render all media.
 
 A `.base` file stores structured views in YAML. Table, list, cards, and Kanban layouts support filtering, sorting, grouping, formulas, property editing, and CSV export. Unsupported functions show an error. Arbitrary JavaScript is not evaluated as a formula.
 
