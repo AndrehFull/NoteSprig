@@ -11,14 +11,21 @@ export function Login({ onLogin }: {
     onLogin: () => void;
 }) {
     const [password, setPassword] = useState('');
+    const [confirmation, setConfirmation] = useState('');
+    const [code, setCode] = useState('');
+    // First-run setup: the server has no password yet and printed a one-time code in its log.
+    const [setup, setSetup] = useState(false);
     const [error, setError] = useState('');
     const [busy, setBusy] = useState(false);
+    useEffect(() => { api.session().then((session) => setSetup(Boolean(session.setupRequired))).catch(() => { }); }, []);
     async function submit(event: FormEvent) {
         event.preventDefault();
-        setBusy(true);
         setError('');
+        if (setup && password !== confirmation) { setError(t("The passwords do not match.")); return; }
+        setBusy(true);
         try {
-            await api.login(password);
+            if (setup) await api.setup(code, password);
+            else await api.login(password);
             onLogin();
         }
         catch (caught) {
@@ -34,14 +41,25 @@ export function Login({ onLogin }: {
         <LanguageSelector />
         <p className="eyebrow">{t("YOUR KNOWLEDGE SPACE")}</p>
         <h1>{BRAND.name}</h1>
-        <p className="muted">{t("Sign in to open your personal vault.")}</p>
-        <label htmlFor="password">{t("Password")}</label>
-        <input autoFocus id="password" type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required/>
+        {setup ? <>
+          <p className="muted">{t("Welcome! Create the password that protects this NoteSprig. To confirm that you run this server, enter the setup code shown in its log (docker compose logs notesprig).")}</p>
+          <label htmlFor="setup-code">{t("Setup code")}</label>
+          <input autoFocus id="setup-code" autoComplete="one-time-code" spellCheck={false} placeholder="XXXX-XXXX-XXXX" value={code} onChange={(event) => setCode(event.target.value)} required/>
+          <label htmlFor="password">{t("New password")}</label>
+          <input id="password" type="password" autoComplete="new-password" minLength={12} value={password} onChange={(event) => setPassword(event.target.value)} required/>
+          <label htmlFor="password-confirmation">{t("Repeat password")}</label>
+          <input id="password-confirmation" type="password" autoComplete="new-password" minLength={12} value={confirmation} onChange={(event) => setConfirmation(event.target.value)} required/>
+          <p className="login-footnote">{t("Use at least 12 characters. NoteSprig stores only a scrypt hash of the password.")}</p>
+        </> : <>
+          <p className="muted">{t("Sign in to open your personal vault.")}</p>
+          <label htmlFor="password">{t("Password")}</label>
+          <input autoFocus id="password" type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required/>
+        </>}
         {error && <p className="form-error">{translateMessage(error)}</p>}
         <button className="primary-button full" disabled={busy} type="submit">
-          <LockKeyhole size={16}/> {busy ? t("Signing in\u2026") : t("Sign in")}
+          <LockKeyhole size={16}/> {setup ? (busy ? t("Creating password\u2026") : t("Create password and open")) : (busy ? t("Signing in\u2026") : t("Sign in"))}
         </button>
-        <p className="login-footnote">{t("Your notes stay on your own server.")}</p>
+        {!setup && <p className="login-footnote">{t("Your notes stay on your own server.")}</p>}
       </form>
     </main>);
 }

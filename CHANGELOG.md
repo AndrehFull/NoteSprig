@@ -4,6 +4,11 @@ All notable changes are listed here. Versions follow [Semantic Versioning](https
 
 ## Unreleased
 
+### Added
+
+- First-run password setup in the browser, gated by a one-time code from the server log; the session secret is generated automatically. `NOTESPRIG_PASSWORD_HASH` and `SESSION_SECRET` become optional.
+- Change the password in Settings; other devices are signed out.
+
 ## 0.1.0 — 2026-11-21
 
 First public release.

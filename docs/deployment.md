@@ -4,32 +4,35 @@ This guide describes a single-vault deployment with Docker Compose and an HTTPS 
 
 ## Prepare the application
 
-Place the source repository in `/opt/notesprig`, then install dependencies and create local configuration:
+Place the repository in `/opt/notesprig` (Compose file, backup tools, and documentation), then prepare the persistent volume and start the service:
 
 ```sh
-cd /opt/notesprig
-npm ci
-cp .env.example .env
-chmod 600 .env
-npm run set-password
-```
-
-The password generator requires at least 12 characters. Copy the complete generated `NOTESPRIG_PASSWORD_HASH` line into `.env`, including the single quotes around `scrypt$...`. The quotes prevent Compose from interpolating dollar signs. Generate the session secret with `openssl rand -hex 32` and place that value in `SESSION_SECRET`.
-
-Production rejects placeholder credentials. The local development password is not used in production. Changing the session secret ends existing sessions.
-
-Prepare the persistent volume and start the service:
-
-```sh
+sudo git clone https://github.com/AndrehFull/NoteSprig.git /opt/notesprig
+sudo chown -R "$USER" /opt/notesprig && cd /opt/notesprig
+cp .env.example .env && chmod 600 .env
 mkdir -p data/vault
 sudo chown -R 1000:1000 data
 sudo chmod -R u+rwX,go-rwx data
-docker compose config -q
 docker compose pull
 docker compose up -d
-docker compose ps
-docker compose logs --tail=40 notesprig
+docker compose logs --tail=20 notesprig
 ```
+
+## Create the password
+
+No credentials need to be generated in advance. On first start, the log shows a one-time setup code:
+
+```text
+First-time setup: open NoteSprig in your browser and enter the setup code ABCD-EFGH-JKMN to create the password.
+```
+
+Open the app through its HTTPS address, enter the code, and choose a password of at least 12 characters. The code proves that you control the server, so a visitor who reaches the public address first cannot claim the instance. It works once and is not printed again after setup.
+
+NoteSprig stores a scrypt hash of the password and a generated session secret in `data/notesprig-auth.json` (permission 600); the password itself is never stored. Change the password later in **Settings → Password**, which signs out other devices. Signing in requires HTTPS because session cookies are `Secure`.
+
+**Forgot the password?** Stop the app, delete `data/notesprig-auth.json`, and start it again: every session ends and a new setup code appears in the log. Notes and vaults are not affected.
+
+**Managed deployments** can still provide credentials through `.env` instead: `NOTESPRIG_PASSWORD_HASH` from `npm run set-password` (keep the single quotes around `scrypt$...`) and a `SESSION_SECRET` of at least 32 characters (`openssl rand -hex 32`). When set, they take precedence and the password cannot be changed in the app. Example placeholder values are treated as unset.
 
 Compose pulls the prebuilt image `ghcr.io/andrehfull/notesprig` for amd64 or arm64. Each image is built by GitHub Actions only after the full test suite passes for that commit and carries a signed build provenance attestation (`gh attestation verify oci://ghcr.io/andrehfull/notesprig:<version> --repo AndrehFull/NoteSprig`). Set `NOTESPRIG_VERSION` in `.env` to pin a release such as `0.1.0`; `latest` follows stable releases and `edge` follows the main branch. To build from the checkout instead, use `docker compose up -d --build` (the web build needs about 2 GB of memory).
 
@@ -43,8 +46,9 @@ The image runs as UID 1000 with a read-only root filesystem, dropped capabilitie
 | `PORT` | HTTP port; defaults to 4317 |
 | `NOTESPRIG_VAULT` | Vault directory; `/data/vault` inside the image |
 | `NOTESPRIG_DEV_PASSWORD` | Local development password only |
-| `NOTESPRIG_PASSWORD_HASH` | Production scrypt password hash |
-| `SESSION_SECRET` | Random production session secret, at least 32 characters |
+| `NOTESPRIG_PASSWORD_HASH` | Optional production scrypt password hash; without it the password is created in the browser |
+| `NOTESPRIG_AUTH_FILE` | Generated credential file; defaults to `notesprig-auth.json` beside the default vault (`/data` in Docker) |
+| `SESSION_SECRET` | Optional session secret, at least 32 characters; generated and stored automatically when unset |
 | `TRUST_PROXY` | Set to `1` only behind a trusted proxy; configured in Compose |
 | `NOTESPRIG_VAULTS_DIR` | Folder for additional vaults; defaults to `vaults` beside the default vault (`/data/vaults` in Docker) |
 | `NOTESPRIG_BACKUP_PASSWORD` | Backup tool password for unattended execution |
@@ -151,6 +155,7 @@ Data remains in the bind mount. The interface cache updates through the service 
 
 - **Port 4317 is busy:** stop another API process or adjust the host-side Compose binding and proxy target.
 - **Permission errors:** verify the mounted data directory is writable by UID 1000.
-- **Login fails in production:** check the complete quoted password hash, session secret, and HTTPS proxy configuration. Never put the development password in production.
+- **Login fails in production:** use the HTTPS address (cookies are `Secure`). With `.env` credentials, check the complete quoted password hash and session secret. To reset a forgotten password, see [Create the password](#create-the-password).
+- **No setup code in the log:** a password already exists in `data/notesprig-auth.json` or `.env`; sign in, or reset as described above.
 - **PWA cannot install or reload offline:** use localhost or HTTPS and open the compiled app online first. Vite does not enable the service worker.
 - **Container is unhealthy:** inspect `docker compose logs --tail=100 notesprig`; redact secrets and note content before sharing logs.

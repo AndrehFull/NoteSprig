@@ -12,7 +12,7 @@ No guaranteed response time or bug bounty is offered.
 
 ## Deployment boundaries
 
-- Use a unique production password and random session secret. The development password is for local development only.
+- Use a unique production password of at least 12 characters. Keep the first-run setup code private until setup is complete. The development password is for local development only.
 - Terminate HTTPS at a trusted proxy. Expose the app port only to that proxy. `TRUST_PROXY=1` trusts forwarded headers and must not be used behind an untrusted route.
 - Treat filesystem and Docker access as access to the vault. Notes are readable files on the server; the app does not provide end-to-end encryption for live data.
 - Offline notes and drafts remain in that browser's storage. Logging out clears the private app cache; clearing browser storage removes pending local drafts.

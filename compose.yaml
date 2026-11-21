@@ -20,8 +20,10 @@ services:
       PORT: 4317
       TRUST_PROXY: "1"
       NOTESPRIG_VAULT: /data/vault
-      NOTESPRIG_PASSWORD_HASH: ${NOTESPRIG_PASSWORD_HASH:?configure NOTESPRIG_PASSWORD_HASH in .env}
-      SESSION_SECRET: ${SESSION_SECRET:?configure SESSION_SECRET in .env}
+      # Optional. Without them, NoteSprig prints a one-time setup code in its log; create the
+      # password in the browser. Generated credentials are stored in /data/notesprig-auth.json.
+      NOTESPRIG_PASSWORD_HASH: ${NOTESPRIG_PASSWORD_HASH:-}
+      SESSION_SECRET: ${SESSION_SECRET:-}
     volumes:
       - ./data:/data
     ports:

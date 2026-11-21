@@ -18,7 +18,7 @@ async function vaultContext(): Promise<ReferenceContext> {
 }
 export async function request<T>(url: string, init?: RequestInit): Promise<T> {
     let workspaceHeaders:Record<string,string>={};
-    if(!/^\/api\/(?:session|login|logout|boards\/context|vaults)(?:\?.*)?$/.test(url)) {try {workspaceHeaders={'X-NoteSprig-Context':JSON.stringify(currentContext())};} catch { /* Bootstrap endpoints establish identity before private app calls. */ }}
+    if(!/^\/api\/(?:session|login|logout|setup|password|boards\/context|vaults)(?:\?.*)?$/.test(url)) {try {workspaceHeaders={'X-NoteSprig-Context':JSON.stringify(currentContext())};} catch { /* Bootstrap endpoints establish identity before private app calls. */ }}
     const response = await fetch(url, {
         credentials: 'same-origin',
         signal: init?.signal || AbortSignal.timeout(30000),
@@ -55,7 +55,11 @@ export const api = {
     reviewBoard: (payload:{path:string;baseHash:string;context:ReferenceContext;previousContext:ReferenceContext;bindings:{elementId:string;state:'bound'|'unbound';path?:string;fragment?:string}[]}) => request<{path:string;board:BoardDocument;hash:string}>('/api/boards/review',{method:'POST',body:JSON.stringify(payload)}),
     session: () => request<{
         authenticated: boolean;
+        setupRequired?: boolean;
     }>('/api/session'),
+    setup: (code: string, password: string) => request<{ authenticated: boolean }>('/api/setup', { method: 'POST', body: JSON.stringify({ code, password }) }),
+    passwordStatus: () => request<{ changeable: boolean }>('/api/password'),
+    changePassword: (current: string, next: string) => request<{ changed: boolean }>('/api/password', { method: 'POST', body: JSON.stringify({ current, next }) }),
     login: (password: string) => request<{
         authenticated: boolean;
     }>('/api/login', {

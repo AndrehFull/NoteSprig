@@ -85,7 +85,7 @@ O [README principal](README.md) e os guias técnicos estão em inglês. Veja o [
 
 ## Hospedagem com Docker
 
-O Compose executa a API e a interface compilada juntas, com dados persistentes. Configure um hash de senha de produção, um segredo de sessão aleatório, permissões do volume e um proxy HTTPS antes de iniciar.
+O Compose executa uma imagem pronta e testada (`ghcr.io/andrehfull/notesprig`, amd64 e arm64) com dados persistentes. Prepare as permissões do volume e um proxy HTTPS; no primeiro acesso, crie a senha no navegador com o código de configuração exibido no log do servidor.
 
 Siga o **[guia de implantação](docs/deployment.md)** para Docker, Cloudflare, backups e restauração. Mantenha a porta do aplicativo restrita ao localhost ou a uma rede privada do proxy.
 

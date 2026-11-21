@@ -34,7 +34,7 @@ Structured-view formulas are interpreted by supported operators and functions ra
 
 ## Trust boundaries
 
-Password authentication grants access to one vault. There are no per-user accounts or per-note permissions. Production requires a configured password hash and session secret. The trusted HTTPS proxy is responsible for external TLS termination; the server handles session cookies and authenticated file operations.
+Password authentication grants access to one vault. There are no per-user accounts or per-note permissions. In production, the password is created in the browser on first run, gated by a one-time setup code printed in the server log; a scrypt hash and a generated session secret are stored in a 0600 credential file, unless `NOTESPRIG_PASSWORD_HASH` and `SESSION_SECRET` are provided. Changing the password increments a credential version that invalidates other sessions. The trusted HTTPS proxy is responsible for external TLS termination; the server handles session cookies and authenticated file operations.
 
 Server filesystem access also grants access to readable notes. Encryption protects backup archives, not live files on the server. See [SECURITY.md](../SECURITY.md) and [deployment](deployment.md).
 

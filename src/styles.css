@@ -243,3 +243,4 @@ button { -webkit-tap-highlight-color: transparent; }
 .vault-list form{display:flex;gap:6px;flex:1}.vault-list form input{height:30px!important}
 .vault-create label{display:block;margin-bottom:7px}.vault-create>div{display:flex;gap:8px}.vault-create .primary-button{white-space:nowrap}
 .vault-remove{display:flex;flex-wrap:wrap;align-items:center;gap:6px;flex:1}.vault-remove p{flex:1 1 100%;margin:2px 0 4px;color:var(--muted);font-size:12px;line-height:1.5}.vault-remove p strong{color:var(--danger)}.vault-remove input{flex:1;min-width:120px;height:30px!important}
+.password-form{display:grid;gap:8px;margin-top:8px}.password-form .primary-button{justify-self:start}

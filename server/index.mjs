@@ -16,11 +16,14 @@ const vaultDir = path.resolve(environment('VAULT') || path.join(projectRoot, 'da
 // Additional vaults live beside the default vault (in Docker: /data/vaults), inside the same persistent volume.
 const vaultsDir = path.resolve(environment('VAULTS_DIR') || path.join(path.dirname(vaultDir), 'vaults'));
 const distDir = path.join(projectRoot, 'dist');
-const auth = createAuth({
+// Generated credentials (password hash, session secret) live beside the vaults in the persistent volume.
+const authFile = path.resolve(environment('AUTH_FILE') || path.join(path.dirname(vaultDir), 'notesprig-auth.json'));
+const auth = await createAuth({
     passwordHash: environment('PASSWORD_HASH'),
     sessionSecret: process.env.SESSION_SECRET,
     devPassword: environment('DEV_PASSWORD'),
     production,
+    storePath: authFile,
 });
 const registry = new VaultRegistry(vaultDir, vaultsDir);
 const attempts = new Map();
@@ -336,7 +339,7 @@ const server = createServer(async (req, res) => {
                 }
             }
             if (req.method === 'GET' && url.pathname === '/api/session') {
-                return json(res, 200, { authenticated: authenticated(req) });
+                return json(res, 200, { authenticated: authenticated(req), setupRequired: auth.setupRequired });
             }
             if (req.method === 'POST' && url.pathname === '/api/login') {
                 if (!checkRateLimit(req, res))
@@ -347,11 +350,30 @@ const server = createServer(async (req, res) => {
                 attempts.delete(req.socket.remoteAddress || 'unknown');
                 return json(res, 200, { authenticated: true }, { 'Set-Cookie': `notesprig_session=${encodeURIComponent(auth.createCookie())}; ${cookieOptions(req)}` });
             }
+            if (req.method === 'POST' && url.pathname === '/api/setup') {
+                if (!checkRateLimit(req, res))
+                    return;
+                const body = await readJson(req, 16 * 1024);
+                await auth.setup(body.code, body.password);
+                attempts.delete(req.socket.remoteAddress || 'unknown');
+                return json(res, 200, { authenticated: true }, { 'Set-Cookie': `notesprig_session=${encodeURIComponent(auth.createCookie())}; ${cookieOptions(req)}` });
+            }
             if (req.method === 'POST' && url.pathname === '/api/logout') {
                 return json(res, 200, { authenticated: false }, { 'Set-Cookie': ['notesprig_session', legacy.sessionCookie].map((name) => `${name}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0${production ? '; Secure' : ''}`) });
             }
             if (!authenticated(req))
                 return json(res, 401, { error: "Authentication required." });
+            if (url.pathname === '/api/password' && req.method === 'POST') {
+                if (!checkRateLimit(req, res))
+                    return;
+                const body = await readJson(req, 16 * 1024);
+                await auth.changePassword(body.current, body.next);
+                attempts.delete(req.socket.remoteAddress || 'unknown');
+                // Other sessions end with the credential change; this browser stays signed in.
+                return json(res, 200, { changed: true }, { 'Set-Cookie': `notesprig_session=${encodeURIComponent(auth.createCookie())}; ${cookieOptions(req)}` });
+            }
+            if (url.pathname === '/api/password' && req.method === 'GET')
+                return json(res, 200, { changeable: !auth.managedByEnvironment });
             if (url.pathname === '/api/vaults' && req.method === 'GET')
                 return json(res, 200, registry.list());
             if (url.pathname === '/api/vaults' && req.method === 'POST')
