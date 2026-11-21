@@ -4,6 +4,10 @@ All notable changes are listed here. Versions follow [Semantic Versioning](https
 
 ## Unreleased
 
+## 0.2.0 — 2026-11-21
+
+No credentials need to be prepared before installing: create the password in the browser on first start.
+
 ### Added
 
 - First-run password setup in the browser, gated by a one-time code from the server log; the session secret is generated automatically. `NOTESPRIG_PASSWORD_HASH` and `SESSION_SECRET` become optional.
