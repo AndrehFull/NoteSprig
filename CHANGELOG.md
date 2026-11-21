@@ -23,6 +23,8 @@ Changes prepared for the first public release are listed under Unreleased. This 
 
 ### Changed
 
+- Docker images are published to GitHub Container Registry for amd64 and arm64 after CI passes: `edge` from main, versioned tags and `latest` from releases, with build provenance attestations. Compose pulls the image by default.
+
 - Adopted the NoteSprig identity, with compatibility for earlier metadata, browser storage, sessions, and backup formats.
 
 ### License

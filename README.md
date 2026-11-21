@@ -96,7 +96,7 @@ This README is also available in [Brazilian Portuguese](README.pt-BR.md). The te
 
 ## Self-host with Docker
 
-Docker Compose runs the API and compiled interface together with a persistent data volume. Before starting it, configure a production password hash, a random session secret, volume permissions, and an HTTPS reverse proxy.
+Docker Compose runs a prebuilt, tested image (`ghcr.io/andrehfull/notesprig`, amd64 and arm64) with a persistent data volume. Before starting it, configure a production password hash, a random session secret, volume permissions, and an HTTPS reverse proxy.
 
 Follow the **[deployment guide](docs/deployment.md)** for Docker, Cloudflare, encrypted backups, and restoration. Keep the application port bound to localhost or a private proxy network.
 

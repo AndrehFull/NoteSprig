@@ -25,10 +25,13 @@ mkdir -p data/vault
 sudo chown -R 1000:1000 data
 sudo chmod -R u+rwX,go-rwx data
 docker compose config -q
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 docker compose ps
 docker compose logs --tail=40 notesprig
 ```
+
+Compose pulls the prebuilt image `ghcr.io/andrehfull/notesprig` for amd64 or arm64. Each image is built by GitHub Actions only after the full test suite passes for that commit and carries a signed build provenance attestation (`gh attestation verify oci://ghcr.io/andrehfull/notesprig:<version> --repo AndrehFull/NoteSprig`). Set `NOTESPRIG_VERSION` in `.env` to pin a release such as `0.1.0`; `latest` follows stable releases and `edge` follows the main branch. To build from the checkout instead, use `docker compose up -d --build` (the web build needs about 2 GB of memory).
 
 The image runs as UID 1000 with a read-only root filesystem, dropped capabilities, and a persistent `./data:/data` bind mount. Compose binds port 4317 to host localhost. Run one application instance per vault.
 
@@ -130,13 +133,17 @@ Vaults removed in the app are moved, not erased, to `data/vaults/.removed/<folde
 
 ## Updates
 
-Create a backup and verify its restoration before updating. After replacing the source with the new version:
+Create a backup and verify its restoration before updating. Then update the checkout (for the backup tools and Compose file), set `NOTESPRIG_VERSION` to the new release in `.env`, and pull the image:
 
 ```sh
 cd /opt/notesprig
-docker compose up -d --build
+git pull
+docker compose pull
+docker compose up -d
 docker compose ps
 ```
+
+To roll back, set `NOTESPRIG_VERSION` to the previous release and run `docker compose pull && docker compose up -d`. Data formats are only migrated forward, so restore the backup taken before the update if a newer version already changed vault metadata.
 
 Data remains in the bind mount. The interface cache updates through the service worker; synchronize edits and reload or reopen tabs if an older version remains active. See [migration](migration.md) for compatibility with earlier development installations.
 

@@ -1,0 +1,100 @@
+name: Publish image
+
+# Images are published only after CI passes for that exact commit:
+#   main         -> ghcr.io/andrehfull/notesprig:edge (+ sha-<commit>)
+#   tag vX.Y.Z   -> :X.Y.Z, :X.Y, and :latest
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions: {}
+
+concurrency:
+  group: publish-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    # Pull requests (including forks) never publish.
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+    env:
+      IMAGE: ghcr.io/andrehfull/notesprig
+      REF_NAME: ${{ github.event.workflow_run.head_branch }}
+      HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - name: Check out the tested commit
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+      - name: Determine release channel
+        id: channel
+        run: |
+          if [[ "$REF_NAME" == "main" ]]; then
+            tags="type=raw,value=edge"$'\n'"type=raw,value=sha-${HEAD_SHA:0:7}"
+          elif [[ "$REF_NAME" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            minor="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}"
+            # Publish a release only when the tag still points at the commit CI tested.
+            tagged="$(git ls-remote origin "refs/tags/$REF_NAME^{}" | cut -f1)"
+            [[ -n "$tagged" ]] || tagged="$(git ls-remote origin "refs/tags/$REF_NAME" | cut -f1)"
+            if [[ "$tagged" != "$HEAD_SHA" ]]; then echo "Tag $REF_NAME does not point at $HEAD_SHA; skipping."; echo "publish=false" >> "$GITHUB_OUTPUT"; exit 0; fi
+            tags="type=raw,value=${REF_NAME#v}"$'\n'"type=raw,value=$minor"$'\n'"type=raw,value=latest"
+          else
+            echo "Not main or a vX.Y.Z tag; nothing to publish."; echo "publish=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          { echo "publish=true"; echo "tags<<TAGS"; echo "$tags"; echo "TAGS"; } >> "$GITHUB_OUTPUT"
+      - name: Describe the image
+        if: steps.channel.outputs.publish == 'true'
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.IMAGE }}
+          flavor: latest=false
+          tags: ${{ steps.channel.outputs.tags }}
+          labels: |
+            org.opencontainers.image.title=NoteSprig
+            org.opencontainers.image.description=Self-hosted connected notes with graph, Canvas, and offline support
+            org.opencontainers.image.licenses=MIT
+            org.opencontainers.image.revision=${{ github.event.workflow_run.head_sha }}
+      - name: Set up QEMU
+        if: steps.channel.outputs.publish == 'true'
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+      - name: Set up Buildx
+        if: steps.channel.outputs.publish == 'true'
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Sign in to GitHub Container Registry
+        if: steps.channel.outputs.publish == 'true'
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push (amd64, arm64)
+        if: steps.channel.outputs.publish == 'true'
+        id: push
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          sbom: true
+          provenance: mode=max
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Attest build provenance
+        if: steps.channel.outputs.publish == 'true'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true

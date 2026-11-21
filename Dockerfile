@@ -1,4 +1,6 @@
-FROM node:22-bookworm-slim AS build
+# The web build is architecture-independent: run it once on the builder's native platform,
+# then assemble the runtime (server dependencies such as sharp) for each target platform.
+FROM --platform=$BUILDPLATFORM node:22-bookworm-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
