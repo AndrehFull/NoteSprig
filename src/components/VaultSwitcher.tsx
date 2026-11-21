@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { Check, ChevronDown, FolderCog, Pencil, Plus, X } from 'lucide-react';
+import { Check, ChevronDown, FolderCog, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { t } from '../i18n';
 import type { VaultEntry } from '../api';
 import { Modal } from './NoteTools';
@@ -30,9 +30,10 @@ export function VaultSwitcher({ vaults, currentId, onSwitch, onManage }: { vault
   </div>;
 }
 
-export function VaultManager({ vaults, currentId, onSwitch, onCreate, onRename, onClose }: { vaults: VaultEntry[]; currentId: string; onSwitch: (id: string) => void; onCreate: (name: string) => Promise<void>; onRename: (id: string, name: string) => Promise<void>; onClose: () => void }) {
+export function VaultManager({ vaults, currentId, onSwitch, onCreate, onRename, onRemove, onClose }: { vaults: VaultEntry[]; currentId: string; onSwitch: (id: string) => void; onCreate: (name: string) => Promise<void>; onRename: (id: string, name: string) => Promise<void>; onRemove: (id: string, confirmName: string) => Promise<void>; onClose: () => void }) {
   const [name, setName] = useState('');
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
+  const [removing, setRemoving] = useState<{ id: string; typed: string } | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   async function run(task: () => Promise<void>) {
@@ -41,16 +42,25 @@ export function VaultManager({ vaults, currentId, onSwitch, onCreate, onRename, 
   }
   const create = (event: FormEvent) => { event.preventDefault(); if (name.trim()) void run(() => onCreate(name)); };
   const rename = (event: FormEvent) => { event.preventDefault(); if (renaming) void run(async () => { await onRename(renaming.id, renaming.name); setRenaming(null); }); };
+  const remove = (event: FormEvent) => { event.preventDefault(); if (removing) void run(async () => { await onRemove(removing.id, removing.typed); setRemoving(null); }); };
   return <Modal onClose={onClose}>
     <div className="modal-heading"><h2>{t('Vaults')}</h2><button className="icon-button" aria-label={t('Close')} onClick={onClose}><X size={18}/></button></div>
     <p className="muted small">{t('Each vault is a separate folder of notes with its own links, graph, history, trash, and settings.')}</p>
     <ul className="vault-list" aria-label={t('Vaults')}>
       {vaults.map((vault) => <li key={vault.id} className={vault.id === currentId ? 'current' : ''}>
-        {renaming?.id === vault.id
+        {removing?.id === vault.id
+          ? <form className="vault-remove" onSubmit={remove}>
+              <p>{t('Remove {v0}? Its folder is moved to the removed-vaults area on the server, not erased, and can be restored by moving it back.', { v0: vault.name })}</p>
+              <input autoFocus aria-label={t('Type {v0} to confirm', { v0: vault.name })} placeholder={vault.name} value={removing.typed} onChange={(event) => setRemoving({ id: vault.id, typed: event.target.value })}/>
+              <button className="primary-button destructive" disabled={busy || removing.typed.trim() !== vault.name}>{t('Remove vault')}</button><button type="button" className="quiet-button" onClick={() => setRemoving(null)}>{t('Cancel')}</button>
+            </form>
+          : renaming?.id === vault.id
           ? <form onSubmit={rename}><input autoFocus aria-label={t('Vault name')} value={renaming.name} maxLength={60} onChange={(event) => setRenaming({ id: vault.id, name: event.target.value })}/><button className="quiet-button" disabled={busy || !renaming.name.trim()}>{t('Save')}</button><button type="button" className="quiet-button" onClick={() => setRenaming(null)}>{t('Cancel')}</button></form>
           : <><span className="vault-name">{vaultLabel(vault)}{vault.id === currentId && <small>{t('Current')}</small>}</span>
             <button className="mini-icon" aria-label={t('Rename vault {v0}', { v0: vaultLabel(vault) })} title={t('Rename')} onClick={() => setRenaming({ id: vault.id, name: vaultLabel(vault) })}><Pencil size={13}/></button>
-            {vault.id !== currentId && <button className="quiet-button" disabled={busy} onClick={() => onSwitch(vault.id)}>{t('Open vault')}</button>}</>}
+            {vault.id !== currentId && <button className="quiet-button" disabled={busy} onClick={() => onSwitch(vault.id)}>{t('Open vault')}</button>}
+            {/* Like Obsidian, the open vault cannot be removed; the default vault is the fallback and is kept. */}
+            {vault.id !== currentId && !vault.default && <button className="mini-icon danger-action" aria-label={t('Remove vault {v0}', { v0: vault.name })} title={t('Remove vault')} onClick={() => { setRenaming(null); setRemoving({ id: vault.id, typed: '' }); }}><Trash2 size={13}/></button>}</>}
       </li>)}
     </ul>
     <form className="vault-create" onSubmit={create}>

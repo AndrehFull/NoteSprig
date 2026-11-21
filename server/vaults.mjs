@@ -78,6 +78,26 @@ export class VaultRegistry {
       return { id: entry.id, name: entry.name, default: entry.isDefault };
     });
   }
+  /**
+   * Removing a vault never deletes files: the folder moves to <vaults>/.removed/ (skipped by backups and startup),
+   * where an administrator can restore it by moving it back and restarting. The default vault cannot be removed.
+   */
+  remove(id, confirmName) {
+    return this.exclusive(async () => {
+      const entry = this.get(id);
+      if (!id || entry.isDefault) throw fail('The default vault cannot be removed.', 400);
+      if (typeof confirmName !== 'string' || confirmName.trim() !== entry.name) throw fail('Type the vault name exactly to confirm.', 400);
+      // Stop routing first, then let in-flight operations on this vault finish before its folder moves.
+      this.entries.delete(id);
+      try {
+        const removed = path.join(this.vaultsDir, '.removed');
+        await mkdir(removed, { recursive: true, mode: 0o700 });
+        const target = path.join(removed, `${entry.folder}-${new Date().toISOString().replace(/[:.]/g, '-')}`);
+        await entry.vault.mutate(() => rename(entry.vault.root, target));
+        return { id, removedTo: path.relative(this.vaultsDir, target) };
+      } catch (error) { this.entries.set(id, entry); throw error; }
+    });
+  }
   async writeName(entry, name) {
     const target = path.join(entry.vault.root, METADATA), temporary = `${target}.${process.pid}.tmp`;
     await writeFile(temporary, JSON.stringify({ version: 1, name }, null, 2) + '\n', { mode: 0o600 });

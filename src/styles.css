@@ -242,3 +242,4 @@ button { -webkit-tap-highlight-color: transparent; }
 .vault-list .vault-name{display:flex;align-items:center;gap:8px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;font-size:13px}.vault-list .vault-name small{color:var(--accent);font-size:10px;text-transform:uppercase;letter-spacing:.06em}
 .vault-list form{display:flex;gap:6px;flex:1}.vault-list form input{height:30px!important}
 .vault-create label{display:block;margin-bottom:7px}.vault-create>div{display:flex;gap:8px}.vault-create .primary-button{white-space:nowrap}
+.vault-remove{display:flex;flex-wrap:wrap;align-items:center;gap:6px;flex:1}.vault-remove p{flex:1 1 100%;margin:2px 0 4px;color:var(--muted);font-size:12px;line-height:1.5}.vault-remove input{flex:1;min-width:120px;height:30px!important}

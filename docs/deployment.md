@@ -126,6 +126,8 @@ Inspect the restored notes, attachments, and hidden metadata. To switch to that 
 
 An additional vault restores the same way. Stop the app, restore the archive to a new folder under `data/vaults/`, assign UID 1000 ownership, and start the app; the vault keeps its name. Do not run a restored copy beside its original: two folders with the same vault identity are refused at startup.
 
+Vaults removed in the app are moved, not erased, to `data/vaults/.removed/<folder>-<time>`. Backups skip that folder. To undo a removal, stop the app, move the folder back into `data/vaults/` under any name, and start the app; the vault returns with its name and identity. Delete folders from `.removed/` yourself when you no longer need them.
+
 ## Updates
 
 Create a backup and verify its restoration before updating. After replacing the source with the new version:

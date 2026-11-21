@@ -45,6 +45,7 @@ export const api = {
     vaults: () => request<VaultEntry[]>('/api/vaults'),
     createVault: (name: string) => request<VaultEntry>('/api/vaults', { method: 'POST', body: JSON.stringify({ name }) }),
     renameVault: (id: string, name: string) => request<VaultEntry>('/api/vaults', { method: 'PUT', body: JSON.stringify({ id, name }) }),
+    removeVault: (id: string, confirmName: string) => request<{ id: string; removedTo: string }>('/api/vaults', { method: 'DELETE', body: JSON.stringify({ id, confirmName }) }),
     board: (path: string, context: ReferenceContext) => request<{path:string;board:BoardDocument;hash:string}>(`/api/boards?path=${encodeURIComponent(path)}&context=${encodeURIComponent(JSON.stringify(context))}`),
     saveBoard: (payload: {path:string;board:BoardDocument;baseHash?:string;context:ReferenceContext}, create = false, signal?:AbortSignal) => request<{path:string;board:BoardDocument;hash:string}>('/api/boards', {method:create?'POST':'PUT',body:JSON.stringify(payload),signal}),
     boardPreview: (path:string, context:ReferenceContext, fragment?:string, signal?:AbortSignal) => request<{title:string;excerpt:string;status:'ready';revision:string}>('/api/boards/preview',{method:'POST',body:JSON.stringify({path,context,fragment}),signal}),

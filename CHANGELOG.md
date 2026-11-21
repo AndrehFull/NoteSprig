@@ -19,7 +19,7 @@ Changes prepared for the first public release are listed under Unreleased. This 
 - Excalidraw-based Canvas (`.board`) combining drawings, images, and live Markdown note cards, with guarded note references, versioned saves, offline drafts, private recovery bundles, and `.excalidraw`/PNG/SVG sharing.
 - Web embeds for any `https` address in the Canvas, including bare domains and pasted links; embeds export as link cards.
 - Conversion of legacy `.canvas` files into a separate Canvas copy; the original file is kept.
-- Multiple vaults: switch, create, and rename vaults from the file explorer, each with its own files, history, settings, and workspace; automated backups include every vault.
+- Multiple vaults: switch, create, rename, and remove (recoverably) vaults from the file explorer, each with its own files, history, settings, and workspace; automated backups include every vault.
 
 ### Changed
 

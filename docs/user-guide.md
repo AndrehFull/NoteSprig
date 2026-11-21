@@ -24,7 +24,7 @@ Tabs can be pinned, reordered, and split into two pane groups. Layout, bookmarks
 
 A vault is a separate folder of notes with its own links, graph, search, history, trash, settings, and Canvas references. Click the vault name at the top of the file explorer to switch vaults or choose **Manage vaults…** (also in the command palette) to create, rename, or open one. Creating a vault opens it immediately.
 
-Switching saves pending edits first and opens the vault in a clean workspace; tabs, bookmarks, and offline drafts are remembered separately for each vault. Links never cross vaults. This browser remembers the last vault you opened. Vaults are not deleted from the app; remove a vault's folder on the server while the app is stopped.
+Switching saves pending edits first and opens the vault in a clean workspace; tabs, bookmarks, and offline drafts are remembered separately for each vault. Links never cross vaults. This browser remembers the last vault you opened. To remove a vault, open another vault, choose **Manage vaults…**, use the trash icon, and type the vault name to confirm. The default vault and the open vault cannot be removed. Removal never erases files: the folder moves to `.removed/` in the vaults directory on the server.
 
 ## Link notes across folders
 

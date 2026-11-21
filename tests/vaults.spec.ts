@@ -91,3 +91,41 @@ test('a vault removed on the server falls back to the default vault instead of l
   await expect(page.getByRole('button', { name: /^Switch vault/ })).toContainText('My vault');
   await expect(page.locator('button.tree-file[title="Index.md"]')).toBeVisible();
 });
+
+test('removing a vault requires its exact name, keeps its folder, and never removes the default vault', async ({ request }) => {
+  await login(request);
+  const main = (await (await request.get('/api/vaults')).json()).find((vault: { default: boolean }) => vault.default);
+  const remove = (id: string, confirmName: string) => request.delete('/api/vaults', { headers: { 'Content-Type': 'application/json' }, data: { id, confirmName } });
+  expect((await remove(main.id, main.name)).status()).toBe(400);
+  const name = unique('Arquivo');
+  const created = await (await request.post('/api/vaults', { data: { name } })).json();
+  const context = await contextFor(request, created.id);
+  expect((await request.post('/api/note', { headers: headers(context), data: { path: 'Keep.md', content: '# Keep' } })).ok()).toBe(true);
+  expect((await remove(created.id, name + ' typo')).status()).toBe(400);
+  const removed = await remove(created.id, name);
+  expect(removed.ok()).toBe(true);
+  expect((await removed.json()).removedTo).toMatch(/^\.removed\//);
+  expect((await (await request.get('/api/vaults')).json()).some((vault: { id: string }) => vault.id === created.id)).toBe(false);
+  expect((await request.get(`/api/boards/context?vault=${created.id}`)).status()).toBe(404);
+  expect((await request.get('/api/notes', { headers: headers(context) })).status()).toBe(404);
+  // A new vault may reuse the name without colliding with the removed folder.
+  expect((await request.post('/api/vaults', { data: { name } })).ok()).toBe(true);
+});
+
+test('the vault manager removes another vault after typed confirmation; the open and default vaults offer no remove action', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('notesprig.language', 'en'));
+  await page.request.post('/api/login', { data: { password: 'test-session-only' } });
+  const name = unique('Old project');
+  await page.request.post('/api/vaults', { data: { name } });
+  await page.goto('/');
+  await page.getByRole('button', { name: /^Switch vault/ }).click();
+  await page.getByRole('menuitem', { name: 'Manage vaults…' }).click();
+  await expect(page.getByRole('button', { name: /^Remove vault My vault/ })).toHaveCount(0);
+  await page.getByRole('button', { name: `Remove vault ${name}`, exact: true }).click();
+  const confirm = page.getByRole('button', { name: 'Remove vault', exact: true });
+  await expect(confirm).toBeDisabled();
+  await page.getByLabel(`Type ${name} to confirm`).fill(name);
+  await confirm.click();
+  await expect(page.locator('.vault-list')).not.toContainText(name);
+  await expect(page.getByText('Vault removed.', { exact: false }).first()).toBeVisible();
+});

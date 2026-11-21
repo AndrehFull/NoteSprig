@@ -360,6 +360,10 @@ const server = createServer(async (req, res) => {
                 const body = await readJson(req, 16 * 1024);
                 return json(res, 200, await registry.rename(body.id, body.name));
             }
+            if (url.pathname === '/api/vaults' && req.method === 'DELETE') {
+                const body = await readJson(req, 16 * 1024);
+                return json(res, 200, await registry.remove(body.id, body.confirmName));
+            }
             // Route to the vault named by the verified workspace identity the client already sends:
             // the request header, a URL context (attachments, downloads, export), or ?vault= while bootstrapping.
             const capturedContext=req.headers['x-notesprig-context'];
