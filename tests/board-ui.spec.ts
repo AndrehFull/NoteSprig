@@ -74,3 +74,21 @@ test('https web embeds render in a sandboxed iframe and are saved with the Canva
     await page.request.delete(`/api/note?path=${encodeURIComponent(path)}`,{headers:{'Content-Type':'application/json'}});
   }
 });
+
+test('a bare domain typed into Web Embed is treated as https instead of a relative URL', async({page})=>{
+  test.setTimeout(60000);
+  await page.request.post('/api/login',{data:{password:'test-session-only'}});
+  const name=`Bare-${randomUUID().slice(0,8)}`, path=name+'.board';
+  const context=await(await page.request.get('/api/boards/context')).json();
+  const board=createBoard(context);
+  board.scene.elements=[{id:'web',type:'embeddable',x:40,y:40,width:480,height:270,angle:0,link:'example.com'} as any];
+  expect((await page.request.post('/api/boards',{data:{path,board,context}})).ok()).toBe(true);
+  await page.route(/example\.com/, route=>route.fulfill({status:200,contentType:'text/html',body:'<p>stub</p>'}));
+  try {
+    await page.goto('/');
+    await page.locator(`button.tree-file[title="${path}"]`).click();
+    await expect(page.locator('.excalidraw iframe')).toHaveAttribute('src','https://example.com/');
+  } finally {
+    await page.request.delete(`/api/note?path=${encodeURIComponent(path)}`,{headers:{'Content-Type':'application/json'}});
+  }
+});

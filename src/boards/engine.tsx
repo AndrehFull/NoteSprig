@@ -50,7 +50,10 @@ function markerKey(link: unknown): string | null {
 /** External web embeds: any https URL that is not a NoteSprig card marker. */
 export function webEmbedUrl(link: unknown): string | null {
   if (typeof link !== 'string' || link.length > 2048 || markerKey(link)) return null;
-  try { const url = new URL(link); return url.protocol === 'https:' ? url.href : null; } catch { return null; }
+  const value = link.trim();
+  // A bare domain such as "google.com" means https; the engine would otherwise treat it as a relative URL.
+  const candidate = /^[a-z][a-z\d+.-]*:/i.test(value) ? value : /^[\w-]+(\.[\w-]+)+(:\d+)?([/?#].*)?$/.test(value) ? `https://${value}` : '';
+  try { const url = new URL(candidate); return url.protocol === 'https:' ? url.href : null; } catch { return null; }
 }
 function safeCard(element: ExcalidrawElement) {
   const metadata = cardMetadata(element);
@@ -128,6 +131,12 @@ export function BoardEngine(props: BoardEngineProps) {
       onLinkOpen={(element, event) => { event.preventDefault(); if (safeCard(element) && markerKey(element.link)) { latest.current.onOpenCard?.(element.id); return; } const web = webEmbedUrl(element.link); if (web) window.open(web, '_blank', 'noopener,noreferrer'); }}
       onChange={(next, state) => {
         elements.current = next;
+        // Store web embeds with their canonical https URL so the iframe never resolves against this app's origin.
+        const bare = next.filter((element) => element.type === 'embeddable' && !element.isDeleted && !safeCard(element) && webEmbedUrl(element.link) && webEmbedUrl(element.link) !== element.link);
+        if (bare.length && engineApi.current) {
+          const fix = new Set(bare.map((element) => element.id)), api = engineApi.current;
+          queueMicrotask(() => api.updateScene({ elements: api.getSceneElementsIncludingDeleted().map((element) => fix.has(element.id) ? { ...element, link: webEmbedUrl(element.link), version: element.version + 1, versionNonce: Math.floor(Math.random() * 2 ** 31), updated: Date.now() } : element), captureUpdate: runtime.CaptureUpdateAction.NEVER }));
+        }
         const view = { scrollX: state.scrollX, scrollY: state.scrollY, width: state.width, height: state.height, zoom: state.zoom.value };
         const nextViewport = JSON.stringify(view);
         if (nextViewport !== viewport.current) { viewport.current = nextViewport; latest.current.onViewportChange?.(view); }
