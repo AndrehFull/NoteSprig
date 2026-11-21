@@ -92,3 +92,32 @@ test('a bare domain typed into Web Embed is treated as https instead of a relati
     await page.request.delete(`/api/note?path=${encodeURIComponent(path)}`,{headers:{'Content-Type':'application/json'}});
   }
 });
+
+test('typing a bare domain into the Web Embed tool neither freezes nor shows the upstream rejection toast', async({page})=>{
+  test.setTimeout(90000);
+  await page.request.post('/api/login',{data:{password:'test-session-only'}});
+  await page.addInitScript(()=>localStorage.setItem('notesprig.language','en'));
+  await page.route(/google\.com/, route=>route.fulfill({status:200,contentType:'text/html',body:'<p>stub</p>'}));
+  const name=`Typed-${randomUUID().slice(0,8)}`;
+  try {
+    await page.goto('/');
+    await page.getByRole('button',{name:'New Canvas',exact:true}).first().click();
+    await page.getByRole('textbox',{name:'Canvas name',exact:true}).fill(name);
+    await page.getByRole('textbox',{name:'Canvas name',exact:true}).press('Enter');
+    const canvas=page.locator('.excalidraw__canvas.interactive'); await canvas.waitFor();
+    const box=(await canvas.boundingBox())!;
+    await page.locator('.App-toolbar .dropdown-menu-button').click();
+    await page.getByText('Web Embed',{exact:false}).first().click();
+    await page.mouse.move(box.x+260,box.y+120); await page.mouse.down(); await page.mouse.move(box.x+520,box.y+240,{steps:6}); await page.mouse.up();
+    const input=page.locator('.excalidraw-hyperlinkContainer-input');
+    // The engine validates every keystroke ("g", "go", ...); each must be accepted without a toast or a rewrite loop.
+    await input.pressSequentially('google.com',{delay:30,timeout:15000});
+    await expect(page.locator('.Toast')).toHaveCount(0);
+    await input.press('Enter');
+    await expect(page.locator('.excalidraw iframe')).toHaveAttribute('src','https://google.com/');
+    await expect(page.locator('.Toast')).toHaveCount(0);
+    expect(await page.evaluate(()=>1+1)).toBe(2);
+  } finally {
+    await page.request.delete(`/api/note?path=${encodeURIComponent(name+'.board')}`,{headers:{'Content-Type':'application/json'}});
+  }
+});

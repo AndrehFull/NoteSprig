@@ -85,6 +85,10 @@ export function BoardEngine(props: BoardEngineProps) {
     const web = !metadata && webEmbedUrl(element.link);
     // Online web embeds use the engine's sandboxed iframe (null); offline they get a labeled placeholder.
     if (web && navigator.onLine) return null;
+    // The engine validates on every keystroke; incomplete or invalid addresses render a hint, never an iframe.
+    if (!metadata && !web) return <article aria-label={t('Web embed')} data-board-web-embed={element.id} style={{ boxSizing: 'border-box', width: '100%', height: '100%', padding: 14, overflow: 'hidden', overflowWrap: 'anywhere', background: latest.current.theme === 'dark' ? '#26282d' : '#fff', color: latest.current.theme === 'dark' ? '#eee' : '#202124', font: '14px/1.45 system-ui' }}>
+      <strong style={{ display: 'block', marginBottom: 10 }}>{t('Enter a web address')}</strong><div>{t('Use an https address, for example youtube.com/watch?v=… or pt.wikipedia.org.')}</div>
+    </article>;
     if (web) return <article aria-label={t('Web embed')} data-board-web-embed={element.id} style={{ boxSizing: 'border-box', width: '100%', height: '100%', padding: 14, overflow: 'hidden', overflowWrap: 'anywhere', background: latest.current.theme === 'dark' ? '#26282d' : '#fff', color: latest.current.theme === 'dark' ? '#eee' : '#202124', font: '14px/1.45 system-ui' }}>
       <strong style={{ display: 'block', marginBottom: 10 }}>{t('Web embed unavailable offline')}</strong><div>{web}</div>
     </article>;
@@ -126,13 +130,15 @@ export function BoardEngine(props: BoardEngineProps) {
       handleKeyboardGlobally={false} autoFocus={false} aiEnabled={false} theme={props.theme} langCode={language}
       viewModeEnabled={props.readOnly} UIOptions={{ canvasActions: { loadScene: false, saveToActiveFile: false, export: false, saveAsImage: false, toggleTheme: false }, tools: { image: false } }}
       onPaste={() => { blocked(); return false; }}
-      validateEmbeddable={(link) => { if (webEmbedUrl(link)) return true; const key = markerKey(link); const current = engineApi.current?.getSceneElementsIncludingDeleted() ?? elements.current; return Boolean(key && current.some((element) => !element.isDeleted && safeCard(element) && markerKey(element.link) === key)); }}
+      validateEmbeddable={(link) => { if (webEmbedUrl(link)) return true; if (typeof link === 'string' && !markerKey(link) && !link.includes(CARD_PREFIX.slice(0, -1))) return true; const key = markerKey(link); const current = engineApi.current?.getSceneElementsIncludingDeleted() ?? elements.current; return Boolean(key && current.some((element) => !element.isDeleted && safeCard(element) && markerKey(element.link) === key)); }}
       renderEmbeddable={renderCard}
       onLinkOpen={(element, event) => { event.preventDefault(); if (safeCard(element) && markerKey(element.link)) { latest.current.onOpenCard?.(element.id); return; } const web = webEmbedUrl(element.link); if (web) window.open(web, '_blank', 'noopener,noreferrer'); }}
       onChange={(next, state) => {
         elements.current = next;
         // Store web embeds with their canonical https URL so the iframe never resolves against this app's origin.
-        const bare = next.filter((element) => element.type === 'embeddable' && !element.isDeleted && !safeCard(element) && webEmbedUrl(element.link) && webEmbedUrl(element.link) !== element.link);
+        // Only after the link editor closes: rewriting while it is open fights the editor's own value and loops.
+        const editingLink = (state as unknown as { showHyperlinkPopup?: unknown }).showHyperlinkPopup === 'editor';
+        const bare = editingLink ? [] : next.filter((element) => element.type === 'embeddable' && !element.isDeleted && !safeCard(element) && webEmbedUrl(element.link) && webEmbedUrl(element.link) !== element.link);
         if (bare.length && engineApi.current) {
           const fix = new Set(bare.map((element) => element.id)), api = engineApi.current;
           queueMicrotask(() => api.updateScene({ elements: api.getSceneElementsIncludingDeleted().map((element) => fix.has(element.id) ? { ...element, link: webEmbedUrl(element.link), version: element.version + 1, versionNonce: Math.floor(Math.random() * 2 ** 31), updated: Date.now() } : element), captureUpdate: runtime.CaptureUpdateAction.NEVER }));

@@ -462,7 +462,7 @@ export function CanvasView({ path, value, onChange, files, onOpen, onNotice, onL
         x: number;
         y: number;
     }) { const d = Math.max(50, Math.abs(to.x - from.x) * 0.5); return `M${from.x},${from.y} C${from.x + d},${from.y} ${to.x - d},${to.y} ${to.x},${to.y}`; }
-    return <section className="canvas-view" aria-label={t("Canvas")} data-node-count={data.nodes.length} data-edge-count={data.edges.length}>
+    return <section className="canvas-view" aria-label={t("Canvas (legacy format)")} data-node-count={data.nodes.length} data-edge-count={data.edges.length}>
     <div className="canvas-surface" ref={host} tabIndex={0} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp} onPointerDown={(event) => {
             if ((event.target as HTMLElement).closest('.canvas-card, .canvas-edge, .canvas-overlay'))
                 return;

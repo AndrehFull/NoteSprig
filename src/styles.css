@@ -222,6 +222,12 @@ button { -webkit-tap-highlight-color: transparent; }
 .board-toolbar details{position:relative}.board-toolbar details[open]{max-width:360px}
 .board-actions label{display:flex;align-items:center;gap:8px}.board-actions select{max-width:260px}
 .board-stage{flex:1;min-height:280px;position:relative;isolation:isolate}
+.board-toolbar button,.board-actions button,.board-review button,.board-note-list button,.board-notice button,.board-toolbar summary{display:inline-flex;align-items:center;gap:6px;min-height:28px;padding:4px 11px;border:1px solid var(--line);border-radius:5px;background:var(--raised);color:var(--text);font:inherit;font-size:12px;cursor:pointer}
+.board-toolbar button:hover:not(:disabled),.board-actions button:hover:not(:disabled),.board-review button:hover:not(:disabled),.board-note-list button:hover:not(:disabled),.board-notice button:hover:not(:disabled),.board-toolbar summary:hover{border-color:var(--accent,#8263bb)}
+.board-toolbar button:disabled,.board-actions button:disabled,.board-review button:disabled,.board-note-list button:disabled,.board-notice button:disabled{opacity:.45;cursor:default}
+.board-toolbar summary{list-style:none}.board-toolbar summary::-webkit-details-marker{display:none}
+.board-actions,.board-toolbar{font-size:12px;color:var(--muted)}.board-toolbar strong{font-size:14px;color:var(--text)}
+.board-actions select{min-height:28px;padding:3px 8px;border:1px solid var(--line);border-radius:5px;background:var(--raised);color:var(--text);font:inherit}
 .board-notice{padding:10px 16px;margin:0;border-bottom:1px solid var(--border);font-size:13px;flex-shrink:0}
 .board-review{padding:12px;max-height:260px;overflow:auto}.board-review label{display:flex;gap:10px;margin:6px 0}
 .board-note-list{padding:8px 12px;border-top:1px solid var(--border);max-height:180px;overflow:auto;flex-shrink:0}.board-note-list li{display:flex;gap:10px;align-items:center;margin:8px 0}.board-note-list li span{margin-right:auto}

@@ -16,7 +16,7 @@ test('Canvas preserves unknown JSON and supports editing, dragging, connections,
   const initial = { custom: { preserve: true }, nodes: [{ id: 'one', type: 'text', text: 'Primeira ideia', x: 0, y: 0, width: 250, height: 160, extraField: 42 }, { id: 'two', type: 'text', text: 'Segunda ideia', x: 440, y: 0, width: 250, height: 160 }], edges: [{ id: 'original', fromNode: 'one', toNode: 'two', label: 'conecta', customEdge: 'preservar' }] };
   try {
     await create(page.request, path, JSON.stringify(initial)); await page.goto('/'); await open(page, path);
-    const canvas = page.getByRole('region', { name: 'Canvas', exact: true }); await expect(canvas).toHaveAttribute('data-node-count', '2');
+    const canvas = page.getByRole('region', { name: 'Canvas (formato antigo)', exact: true }); await expect(canvas).toHaveAttribute('data-node-count', '2');
     await page.getByRole('button', { name: 'Adicionar cartão de texto', exact: true }).click(); await page.getByRole('textbox', { name: 'Texto do cartão' }).fill('Nova ideia **Markdown**'); await page.getByRole('textbox', { name: 'Texto do cartão' }).press('Escape');
     await expect(canvas).toHaveAttribute('data-node-count', '3');
     const first = page.locator('[data-canvas-node="one"]'); const box = (await first.boundingBox())!;
@@ -31,7 +31,7 @@ test('Canvas preserves unknown JSON and supports editing, dragging, connections,
     await page.getByRole('button', { name: 'Refazer no Canvas', exact: true }).click(); await expect(canvas).toHaveAttribute('data-edge-count', '2');
     await expect.poll(async () => JSON.parse((await note(page.request, path)).content).nodes.length).toBe(3);
     const saved = JSON.parse((await note(page.request, path)).content); expect(saved.custom).toEqual({ preserve: true }); expect(saved.nodes.find((node: { id: string }) => node.id === 'one').extraField).toBe(42); expect(saved.edges[0].customEdge).toBe('preservar'); expect(saved.nodes.find((node: { id: string }) => node.id === 'one').x).not.toBe(0); expect(saved.nodes.find((node: { id: string }) => node.id === 'one').width).toBeGreaterThan(250);
-    await page.reload(); await expect(page.getByRole('region', { name: 'Canvas', exact: true })).toHaveAttribute('data-node-count', '3');
+    await page.reload(); await expect(page.getByRole('region', { name: 'Canvas (formato antigo)', exact: true })).toHaveAttribute('data-node-count', '3');
     await page.screenshot({ path: 'test-results/canvas-completo.png' });
   } finally { await remove(page.request, dir); }
 });
