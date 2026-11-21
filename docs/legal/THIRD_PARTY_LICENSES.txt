@@ -11547,10 +11547,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ==============================================================================
-dompurify@3.4.17
+dompurify@3.4.18
 License: (MPL-2.0 OR Apache-2.0)
 Upstream: git://github.com/cure53/DOMPurify.git
-Package archive: https://registry.npmjs.org/dompurify/-/dompurify-3.4.17.tgz
+Package archive: https://registry.npmjs.org/dompurify/-/dompurify-3.4.18.tgz
 
 --- LICENSE ---
 
@@ -12132,10 +12132,10 @@ Exhibit B - "Incompatible With Secondary Licenses" Notice
   defined by the Mozilla Public License, v. 2.0.
 
 ==============================================================================
-elkjs@0.9.3
-License: EPL-2.0
+elkjs@0.12.1
+License: EPL-2.0 OR GPL-3.0-or-later
 Upstream: https://github.com/kieler/elkjs.git
-Package archive: https://registry.npmjs.org/elkjs/-/elkjs-0.9.3.tgz
+Package archive: https://registry.npmjs.org/elkjs/-/elkjs-0.12.1.tgz
 
 --- LICENSE.md ---
 # Eclipse Public License - v 2.0
@@ -12390,8 +12390,7 @@ No third-party beneficiary rights are created under this Agreement.
 
 “This Source Code may also be made available under the following
 Secondary Licenses when the conditions for such availability set forth
-in the Eclipse Public License, v. 2.0 are satisfied: {name license(s),
-version(s), and exceptions or additional permissions here}.”
+in the Eclipse Public License, v. 2.0 are satisfied: GNU General Public License v3.0 or later”
 
 > Simply including a copy of this Agreement, including this Exhibit A is
 > not sufficient to license the Source Code under Secondary Licenses.
@@ -13817,10 +13816,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ==============================================================================
-mermaid@12.2.0
+mermaid@12.3.0
 License: MIT
 Upstream: https://github.com/mermaid-js/mermaid
-Package archive: https://registry.npmjs.org/mermaid/-/mermaid-12.2.0.tgz
+Package archive: https://registry.npmjs.org/mermaid/-/mermaid-12.3.0.tgz
 
 --- LICENSE ---
 The MIT License (MIT)

@@ -1,6 +1,6 @@
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
-import branding from './branding.json';
+import branding from './branding.json' with { type: 'json' };
 
 const manifest = JSON.stringify({ name: branding.name, short_name: branding.shortName, description: branding.description, lang: 'en', start_url: '/', scope: '/', display: 'standalone', background_color: '#1e1e1e', theme_color: branding.themeColor, icons: [{ src: '/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any maskable' }] });
 function brandPlugin(): Plugin {

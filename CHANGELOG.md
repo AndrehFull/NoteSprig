@@ -12,6 +12,7 @@ All notable changes are listed here. Versions follow [Semantic Versioning](https
 ### Changed
 
 - Updated lucide-react to 1.x, d3-force to 3.0.1, and the checkout, setup-node, and upload-artifact actions; removed the deprecated @types/dompurify stub (DOMPurify ships its own types).
+- Updated the build to Vite 8 with @vitejs/plugin-react 6 (production builds are much faster), DOMPurify 3.4.18, Mermaid 12.3 (its elkjs layout dependency is now offered under EPL-2.0 OR GPL-3.0-or-later and is distributed under EPL-2.0), and concurrently 10.
 
 ## 0.1.0 — 2026-11-21
 

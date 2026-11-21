@@ -1932,10 +1932,10 @@
   },
   {
     "name": "dompurify",
-    "version": "3.4.17",
+    "version": "3.4.18",
     "license": "(MPL-2.0 OR Apache-2.0)",
     "repository": "git://github.com/cure53/DOMPurify.git",
-    "archive": "https://registry.npmjs.org/dompurify/-/dompurify-3.4.17.tgz",
+    "archive": "https://registry.npmjs.org/dompurify/-/dompurify-3.4.18.tgz",
     "noticeFiles": [
       "LICENSE",
       "LICENSE-MPL"
@@ -1943,10 +1943,10 @@
   },
   {
     "name": "elkjs",
-    "version": "0.9.3",
-    "license": "EPL-2.0",
+    "version": "0.12.1",
+    "license": "EPL-2.0 OR GPL-3.0-or-later",
     "repository": "https://github.com/kieler/elkjs.git",
-    "archive": "https://registry.npmjs.org/elkjs/-/elkjs-0.9.3.tgz",
+    "archive": "https://registry.npmjs.org/elkjs/-/elkjs-0.12.1.tgz",
     "noticeFiles": [
       "LICENSE.md"
     ]
@@ -2344,10 +2344,10 @@
   },
   {
     "name": "mermaid",
-    "version": "12.2.0",
+    "version": "12.3.0",
     "license": "MIT",
     "repository": "https://github.com/mermaid-js/mermaid",
-    "archive": "https://registry.npmjs.org/mermaid/-/mermaid-12.2.0.tgz",
+    "archive": "https://registry.npmjs.org/mermaid/-/mermaid-12.3.0.tgz",
     "noticeFiles": [
       "LICENSE"
     ]

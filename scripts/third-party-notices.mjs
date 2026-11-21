@@ -44,6 +44,7 @@ for (const [directory, entry] of Object.entries(serverLock.packages)) {
 }
 
 const inventory = [...packages.values()].sort((a, b) => compare(`${a.name}@${a.version}`, `${b.name}@${b.version}`));
+const elkVersion = inventory.find((item) => item.name === 'elkjs')?.version ?? 'unknown';
 const introduction = `# Third-party notices
 
 NoteSprig's original code and documentation use MIT. The components below retain their own licenses and copyright notices. This index includes installed runtime dependencies of the frontend and production server; some may not appear in a particular tree-shaken build. Optional binaries for other operating systems or architectures are listed separately and are not distributed by this installation. Development tools and the container base operating system are outside this npm inventory.
@@ -56,7 +57,7 @@ Full upstream license and notice texts are preserved in [THIRD_PARTY_LICENSES.tx
 
 - **Excalidraw and its fonts** retain their individual licenses. Font file hashes, exact notices, and upstream source information are recorded in [board-fonts.json](docs/legal/board-fonts.json); font licenses are included below.
 - **sharp/libvips** decode and validate board raster images on the server. The unmodified shared native library retains LGPL-3.0-or-later and the notices of its bundled dependencies. Its pinned build sources and upstream component versions are preserved with the supplemental notices. Users may replace or rebuild the shared library; the project MIT license does not relicense it.
-- **elkjs** is licensed under EPL-2.0 and is a transitive Mermaid dependency. The locked version's source is [kieler/elkjs 0.9.3](https://github.com/kieler/elkjs/tree/0.9.3), with the underlying Java layout implementation in [Eclipse ELK](https://github.com/eclipse-elk/elk). Preserve its license and source availability information when distributing it; an MIT license on this project does not relicense elkjs.
+- **elkjs** is a transitive Mermaid dependency offered under EPL-2.0 OR GPL-3.0-or-later; NoteSprig distributes it under EPL-2.0. The locked version's source is [kieler/elkjs ${elkVersion}](https://github.com/kieler/elkjs/tree/${elkVersion}), with the underlying Java layout implementation in [Eclipse ELK](https://github.com/eclipse-elk/elk). Preserve its license and source availability information when distributing it; an MIT license on this project does not relicense elkjs.
 - **DOMPurify** is offered under \`MPL-2.0 OR Apache-2.0\`. Both license texts supplied by the package are retained.
 - **KaTeX** includes the mathematical fonts used by the interface. Its supplied license text is retained with the package's notices.
 - **khroma** omits a license field in its published package metadata. Its included \`license\` file explicitly states MIT and is used as the inventory source.
