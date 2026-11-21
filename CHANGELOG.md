@@ -9,6 +9,10 @@ All notable changes are listed here. Versions follow [Semantic Versioning](https
 - First-run password setup in the browser, gated by a one-time code from the server log; the session secret is generated automatically. `NOTESPRIG_PASSWORD_HASH` and `SESSION_SECRET` become optional.
 - Change the password in Settings; other devices are signed out.
 
+### Changed
+
+- Updated lucide-react to 1.x, d3-force to 3.0.1, and the checkout, setup-node, and upload-artifact actions; removed the deprecated @types/dompurify stub (DOMPurify ships its own types).
+
 ## 0.1.0 — 2026-11-21
 
 First public release.

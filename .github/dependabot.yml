@@ -5,6 +5,14 @@ updates:
     schedule:
       interval: monthly
     open-pull-requests-limit: 5
+    groups:
+      # The React plugin's major versions require matching Vite majors; update them together.
+      vite:
+        patterns: ["vite", "@vitejs/*"]
+    ignore:
+      # Type definitions follow the Node.js runtime used by the Docker image (22.x).
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: npm
     directory: /server
     schedule:
@@ -14,3 +22,6 @@ updates:
     directory: /
     schedule:
       interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]

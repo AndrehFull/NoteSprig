@@ -17,7 +17,7 @@ Full upstream license and notice texts are preserved in [THIRD_PARTY_LICENSES.tx
 
 The distributed npm components are not patched by NoteSprig; bundling and minification do not change their license ownership. If you modify or redistribute a component, review its applicable source and notice requirements. Container images additionally contain Node.js and Debian packages with their own licenses and notices.
 
-## Locked runtime packages (295)
+## Locked runtime packages (296)
 
 | Package | Version | License |
 | --- | --- | --- |
@@ -186,7 +186,7 @@ The distributed npm components are not patched by NoteSprig; bundling and minifi
 | `d3-dsv` | 3.0.1 | ISC |
 | `d3-ease` | 3.0.1 | BSD-3-Clause |
 | `d3-fetch` | 3.0.1 | ISC |
-| `d3-force` | 3.0.0 | ISC |
+| `d3-force` | 3.0.1 | ISC |
 | `d3-format` | 3.1.2 | ISC |
 | `d3-geo` | 3.1.1 | ISC |
 | `d3-hierarchy` | 3.1.2 | ISC |
@@ -250,7 +250,7 @@ The distributed npm components are not patched by NoteSprig; bundling and minifi
 | `lodash-es` | 4.18.1 | MIT |
 | `lodash.debounce` | 4.0.8 | MIT |
 | `lodash.throttle` | 4.1.1 | MIT |
-| `lucide-react` | 0.468.0 | ISC |
+| `lucide-react` | 1.77.0 | ISC |
 | `marked` | 16.4.2 | MIT |
 | `marked` | 17.0.6 | MIT |
 | `mermaid` | 11.17.2 | MIT |
@@ -267,6 +267,7 @@ The distributed npm components are not patched by NoteSprig; bundling and minifi
 | `path-key` | 3.1.1 | MIT |
 | `perfect-freehand` | 1.2.0 | MIT |
 | `pica` | 7.1.1 | MIT |
+| `picomatch` | 4.0.7 | MIT |
 | `png-chunk-text` | 1.0.0 | MIT |
 | `png-chunks-encode` | 1.0.0 | MIT |
 | `png-chunks-extract` | 1.0.0 | MIT |

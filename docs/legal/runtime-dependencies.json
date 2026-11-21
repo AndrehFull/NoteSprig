@@ -1662,10 +1662,10 @@
   },
   {
     "name": "d3-force",
-    "version": "3.0.0",
+    "version": "3.0.1",
     "license": "ISC",
     "repository": "https://github.com/d3/d3-force.git",
-    "archive": "https://registry.npmjs.org/d3-force/-/d3-force-3.0.0.tgz",
+    "archive": "https://registry.npmjs.org/d3-force/-/d3-force-3.0.1.tgz",
     "noticeFiles": [
       "LICENSE"
     ]
@@ -2304,10 +2304,10 @@
   },
   {
     "name": "lucide-react",
-    "version": "0.468.0",
+    "version": "1.77.0",
     "license": "ISC",
     "repository": "https://github.com/lucide-icons/lucide.git",
-    "archive": "https://registry.npmjs.org/lucide-react/-/lucide-react-0.468.0.tgz",
+    "archive": "https://registry.npmjs.org/lucide-react/-/lucide-react-1.77.0.tgz",
     "noticeFiles": [
       "LICENSE"
     ]
@@ -2468,6 +2468,16 @@
     "license": "MIT",
     "repository": "nodeca/pica",
     "archive": "https://registry.npmjs.org/pica/-/pica-7.1.1.tgz",
+    "noticeFiles": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "picomatch",
+    "version": "4.0.7",
+    "license": "MIT",
+    "repository": "micromatch/picomatch",
+    "archive": "https://registry.npmjs.org/picomatch/-/picomatch-4.0.7.tgz",
     "noticeFiles": [
       "LICENSE"
     ]
