@@ -50,8 +50,8 @@ export function VaultManager({ vaults, currentId, onSwitch, onCreate, onRename, 
       {vaults.map((vault) => <li key={vault.id} className={vault.id === currentId ? 'current' : ''}>
         {removing?.id === vault.id
           ? <form className="vault-remove" onSubmit={remove}>
-              <p>{t('Remove {v0}? Its folder is moved to the removed-vaults area on the server, not erased, and can be restored by moving it back.', { v0: vault.name })}</p>
-              <input autoFocus aria-label={t('Type {v0} to confirm', { v0: vault.name })} placeholder={vault.name} value={removing.typed} onChange={(event) => setRemoving({ id: vault.id, typed: event.target.value })}/>
+              <p><strong>{t('Remove the vault “{v0}”?', { v0: vault.name })}</strong> {t('Its folder is moved to the removed-vaults area on the server, not erased, and can be restored by moving it back.')}</p>
+              <input autoFocus aria-label={t('Type {v0} to confirm', { v0: vault.name })} placeholder={t('Type {v0} to confirm', { v0: vault.name })} value={removing.typed} onChange={(event) => setRemoving({ id: vault.id, typed: event.target.value })}/>
               <button className="primary-button destructive" disabled={busy || removing.typed.trim() !== vault.name}>{t('Remove vault')}</button><button type="button" className="quiet-button" onClick={() => setRemoving(null)}>{t('Cancel')}</button>
             </form>
           : renaming?.id === vault.id
