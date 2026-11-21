@@ -1,8 +1,12 @@
 # Changelog
 
-Changes prepared for the first public release are listed under Unreleased. This file does not imply that a tagged release or hosted service already exists.
+All notable changes are listed here. Versions follow [Semantic Versioning](https://semver.org/); each release has a matching Docker image `ghcr.io/andrehfull/notesprig:<version>`. NoteSprig is self-hosted software; there is no hosted service.
 
 ## Unreleased
+
+## 0.1.0 — 2026-11-21
+
+First public release.
 
 ### Added
 
