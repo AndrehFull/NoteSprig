@@ -3,6 +3,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight, FileText, Folder, FolderOpen, Image, Table2, LayoutDashboard } from 'lucide-react';
 import type { NoteSummary } from '../types';
 import { baseName } from '../knowledge';
+import { scopedKey } from '../workspace';
+/** Folder expansion is remembered per vault; the unscoped key is the pre-vault fallback. */
+const foldersKey = () => { try { return scopedKey('ui:folders'); } catch { return 'notesprig.folders'; } };
 type TreeEntry = {
     path: string;
     name: string;
@@ -18,7 +21,7 @@ export function FileTree({ notes, activePath, onOpen, onAction, onMove }: {
 }) {
     const [collapsed, setCollapsed] = useState<Set<string>>(() => {
         try {
-            return new Set(JSON.parse(localStorage.getItem('notesprig.folders') || '[]'));
+            return new Set(JSON.parse(localStorage.getItem(foldersKey()) ?? localStorage.getItem('notesprig.folders') ?? '[]'));
         }
         catch {
             return new Set();
@@ -49,7 +52,7 @@ export function FileTree({ notes, activePath, onOpen, onAction, onMove }: {
         if (activePath)
             setCollapsed((current) => new Set([...current].filter((folder) => !activePath.startsWith(`${folder}/`))));
     }, [activePath]);
-    useEffect(() => { localStorage.setItem('notesprig.folders', JSON.stringify([...collapsed])); }, [collapsed]);
+    useEffect(() => { try { localStorage.setItem(foldersKey(), JSON.stringify([...collapsed])); } catch { /* Storage may be unavailable. */ } }, [collapsed]);
     useEffect(() => {
         const close = (event: Event) => {
             if (!(event.target as HTMLElement).closest('.file-context-menu'))

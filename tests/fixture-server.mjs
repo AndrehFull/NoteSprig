@@ -18,7 +18,7 @@ for (const [relative, content] of Object.entries(notes)) {
   await writeFile(path.join(root, relative), content);
 }
 process.env.HOST = '127.0.0.1'; process.env.PORT = '4318'; process.env.NODE_ENV = 'development';
-process.env.NOTESPRIG_VAULT = root; process.env.NOTESPRIG_DEV_PASSWORD = 'test-session-only';
+process.env.NOTESPRIG_VAULT = root; process.env.NOTESPRIG_VAULTS_DIR = `${root}-vaults`; process.env.NOTESPRIG_DEV_PASSWORD = 'test-session-only';
 process.env.NOTESPRIG_PASSWORD_HASH = ''; process.env.SESSION_SECRET = '';
-process.on('exit', () => { rmSync(root, { recursive: true, force: true }); });
+process.on('exit', () => { rmSync(root, { recursive: true, force: true }); rmSync(`${root}-vaults`, { recursive: true, force: true }); });
 await import('../server/index.mjs');

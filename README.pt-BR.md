@@ -22,7 +22,7 @@ O NoteSprig reúne notas Markdown, um grafo de conhecimento, um Canvas visual e 
 - **Editor Markdown:** modo fonte, Live Preview e leitura, com propriedades, tarefas, tabelas, callouts, código destacado, fórmulas e diagramas Mermaid.
 - **Pensamento visual:** grafos global e local com filtros e controles de forças; Canvas com Excalidraw que reúne desenhos, imagens e cartões de notas, com rascunhos offline e recuperação privada.
 - **Visualizações estruturadas:** tabelas, listas, cartões e Kanban definidos em YAML, com filtros e fórmulas.
-- **Workspace flexível:** pastas, favoritos, abas fixadas, painéis divididos, templates e notas diárias.
+- **Workspace flexível:** vários vaults, pastas, favoritos, abas fixadas, painéis divididos, templates e notas diárias.
 - **Recuperação e portabilidade:** histórico, lixeira, tratamento de conflitos, importação e exportação de pastas/ZIP e backups criptografados.
 - **Acesso em vários dispositivos:** layout responsivo, PWA instalável e rascunhos locais para edição offline após um primeiro acesso conectado.
 

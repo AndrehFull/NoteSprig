@@ -29,7 +29,7 @@ NoteSprig brings Markdown notes, a knowledge graph, visual canvases, and structu
 - **Markdown editing:** source mode, live preview, and reading mode, with properties, tasks, tables, callouts, syntax highlighting, math, and Mermaid diagrams.
 - **Visual thinking:** global and local graphs with filters and force controls; an Excalidraw-powered Canvas that mixes drawings, images, and live note cards, with offline drafts and private recovery. See the [Canvas guide](docs/visual-boards.md).
 - **Structured views:** YAML-based tables, lists, cards, and Kanban boards with filters and formulas.
-- **A flexible workspace:** folders, bookmarks, pinned tabs, split panes, templates, and daily notes.
+- **A flexible workspace:** multiple vaults, folders, bookmarks, pinned tabs, split panes, templates, and daily notes.
 - **Recovery and portability:** file history, trash, conflict handling, folder and ZIP import/export, and encrypted backups.
 - **Access across devices:** responsive layout, installable PWA, and local drafts for offline editing after an initial connected session.
 

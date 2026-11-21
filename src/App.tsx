@@ -1,15 +1,16 @@
-import { bootstrapWorkspace, scopedKey, forgetWorkspace } from './workspace';
+import { bootstrapWorkspace, scopedKey, forgetWorkspace, currentContext } from './workspace';
 import { pendingPrivateWork } from './storage';
 import { saveAllBoards, clearBoardSessions, dirtyBoards } from './boards/session';
 import { createBoard, sameContext, type ReferenceContext } from '../shared/board-schema.mjs';
 import { t, useLanguage, translateMessage } from './i18n';
 import { LanguageSelector } from './components/LanguageSelector';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type SetStateAction, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
-import { ArrowLeft, ArrowRight, BookOpen, Bookmark, CalendarDays, Check, ChevronDown, ChevronRight, Command, FilePlus2, Files, FileText, FolderInput, FolderOpen, Hash, Link2, ListTree, LockKeyhole, LogOut, Pin, Columns2, Rows2, WifiOff, Wifi, History, Table2, LayoutDashboard, Upload, FolderPlus, Network, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Pencil, Plus, Search, Settings2, Tag, Trash2, X, } from 'lucide-react';
+import { ArrowLeft, ArrowRight, BookOpen, Bookmark, CalendarDays, Check, ChevronRight, Command, FilePlus2, Files, FileText, FolderInput, FolderOpen, Hash, Link2, ListTree, LockKeyhole, LogOut, Pin, Columns2, Rows2, WifiOff, Wifi, History, Table2, LayoutDashboard, Upload, FolderPlus, Network, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Pencil, Plus, Search, Settings2, Tag, Trash2, X, } from 'lucide-react';
 import { applyTemplate, formatDate, defaultVaultSettings, type VaultSettings } from './templates';
 import { TemplatesModal } from './components/TemplatesModal';
 import { getLocal, setLocal } from './storage';
-import { api } from './api';
+import { api, selectVault, type VaultEntry } from './api';
+import { VaultManager, VaultSwitcher, vaultLabel } from './components/VaultSwitcher';
 import { mediaUrl } from './media';
 import { BRAND } from './brand';
 import { baseName, parentPath, resolveTargets, type KnowledgeNode } from './knowledge';
@@ -55,7 +56,7 @@ type ModalState = {
     note: Draft;
     remote: NoteDocument;
 } | {
-    kind: 'commands' | 'switcher' | 'settings' | 'trash' | 'private-recovery';
+    kind: 'commands' | 'switcher' | 'settings' | 'trash' | 'private-recovery' | 'vaults';
 } | {
     kind: 'canvas-create' | 'base-create' | 'folder-create';
     initial?: string;
@@ -114,6 +115,8 @@ function readWorkspace(key='notesprig.workspace'): {
         return { tabs: [globalGraph], selected: 'graph', secondary: null, split: 'right', modes: {} };
     }
 }
+/** Export targets the open vault; the server routes by the verified workspace identity. */
+const exportUrl = () => `/api/export?context=${encodeURIComponent(JSON.stringify(currentContext()))}`;
 function App() {
     const language = useLanguage();
     useEffect(() => {
@@ -151,6 +154,8 @@ function App() {
     const [modal, setModal] = useState<ModalState>(null);
     const [notice, setNotice] = useState('');
     const [bookmarks, setBookmarks] = useState(() => storedList('notesprig.bookmarks'));
+    const [vaults, setVaults] = useState<VaultEntry[]>([]);
+    const [vaultId, setVaultId] = useState('');
     const [history, setHistory] = useState<{
         paths: string[];
         index: number;
@@ -301,8 +306,10 @@ function App() {
     }
     async function beginApp() {
         try {
-            await bootstrapWorkspace(api.boardContext);
+            const opened = await bootstrapWorkspace(api.boardContext);
             docs.activateWorkspace();
+            setVaultId(opened.vaultId); selectVault(opened.vaultId);
+            void api.vaults().then(setVaults).catch(() => { });
             const workspace=readWorkspace(scopedKey('ui:workspace'));
             setTabs(workspace.tabs);setSelectedTab(workspace.selected);setSecondaryTab(workspace.secondary);setSplitDirection(workspace.split);setViewModes(workspace.modes);
             setBookmarks(storedList(scopedKey('ui:bookmarks')));
@@ -778,6 +785,18 @@ function App() {
             setImportProgress('');
         }
     }
+    /** Like Obsidian, a vault opens in a clean workspace; pending edits are saved first and never carried across. */
+    async function openVault(id: string) {
+        if (id === vaultId) { setModal(null); return; }
+        if (recordingBusy) { setNotice(t("Finish and save the recording before switching vaults.")); return; }
+        for (const doc of Object.values(docs.ref.current))
+            if (doc.dirty && !(await docs.save(doc.path))) { setNotice(t("Save or recover pending changes before switching vaults.")); return; }
+        if (Object.values(docs.ref.current).some((doc) => doc.dirty) || !(await saveAllBoards()) || dirtyBoards()) { setNotice(t("Save or recover pending changes before switching vaults.")); return; }
+        selectVault(id);
+        window.location.reload();
+    }
+    async function createVault(name: string) { const created = await api.createVault(name); setVaults((current) => [...current, created]); await openVault(created.id); }
+    async function renameVault(id: string, name: string) { const renamed = await api.renameVault(id, name); setVaults((current) => current.map((vault) => vault.id === id ? renamed : vault)); }
     async function logout() {
         if (recordingBusy) {
             setNotice(t("Finish and save the recording before signing out."));
@@ -853,7 +872,8 @@ function App() {
                     setModal({ kind: 'history', note: active });
             } },
         { id: 'upload', label: t("Add attachments"), run: () => uploadInput.current?.click() },
-        { id: 'export', label: t("Export vault as ZIP"), run: () => { window.location.href = '/api/export'; } },
+        { id: 'export', label: t("Export vault as ZIP"), run: () => { window.location.href = exportUrl(); } },
+        { id: 'vaults', label: t("Manage vaults…"), run: () => setModal({ kind: 'vaults' }) },
         { id: 'zip', label: t("Import vault from ZIP"), run: () => zipInput.current?.click() },
         { id: 'settings', label: t("Open settings"), run: () => setModal({ kind: 'settings' }) },
         { id: 'import', label: t("Import a Markdown notes folder"), run: () => importInput.current?.click() },
@@ -928,7 +948,7 @@ function App() {
             if (file)
                 void api.importZip(file).then(async (result) => { await refreshNotes(); setNotice(t("{v0} files imported; {v1} skipped.", { v0: result.imported, v1: result.skipped.length })); }).catch((error: Error) => setNotice(error.message));
         }}/>
-    <header className="titlebar"><span>{BRAND.name}</span><span>{t("My vault")}</span><span>{docs.offline ? <><WifiOff size={11}/>{" " + t("Offline \u00B7 local changes")}</> : <><Wifi size={11}/>{" " + t("Connected")}</>}<LockKeyhole size={11}/>{" " + t("Personal")}</span></header>
+    <header className="titlebar"><span>{BRAND.name}</span><span>{vaultLabel(vaults.find((vault) => vault.id === vaultId))}</span><span>{docs.offline ? <><WifiOff size={11}/>{" " + t("Offline \u00B7 local changes")}</> : <><Wifi size={11}/>{" " + t("Connected")}</>}<LockKeyhole size={11}/>{" " + t("Personal")}</span></header>
     <div className="workspace">
       <nav className="ribbon" aria-label={t("Tools")}>
         <button className="icon-button" onClick={() => setLeftOpen(!leftOpen)} title={t("Toggle explorer")} aria-label={t("Toggle explorer")}>{leftOpen ? <PanelLeftClose size={19}/> : <PanelLeftOpen size={19}/>}</button>
@@ -951,7 +971,7 @@ function App() {
       {leftOpen && <aside className="left-sidebar" aria-label={t("Explorer")}>
         <SidebarResizer side="left" width={leftWidth} onResize={setLeftWidth}/>
         <div className="sidebar-tabs"><button className={leftTab === 'files' ? 'active' : ''} onClick={() => setLeftTab('files')} aria-label={t("Files")} title={t("Files")}><Files size={17}/></button><button className={leftTab === 'search' ? 'active' : ''} onClick={() => showSearch()} aria-label={t("Search")} title={t("Search")}><Search size={17}/></button><button className={leftTab === 'bookmarks' ? 'active' : ''} onClick={() => setLeftTab('bookmarks')} aria-label={t("Bookmarks")} title={t("Bookmarks")}><Bookmark size={17}/></button></div>
-        {leftTab === 'files' ? <><div className="explorer-toolbar"><strong>{t("My vault") + " "}<ChevronDown size={13}/></strong><button className="mini-icon" aria-label={t("New folder")} title={t("New folder")} onClick={() => setModal({ kind: 'folder-create' })}><FolderPlus size={15}/></button><button className="mini-icon" aria-label={t("Import Markdown folder")} title={t("Import Markdown folder")} onClick={() => importInput.current?.click()}><FolderInput size={16}/></button><button className="mini-icon" onClick={() => setModal({ kind: 'create', title: '' })} aria-label={t("Create note")} title={t("Create note")}><FilePlus2 size={16}/></button></div><div className="sidebar-content">{treeFiles.length ? <FileTree notes={treeFiles} activePath={active?.path} onOpen={(path) => void openNote(path)} onAction={fileAction} onMove={(from, to) => void moveFile(from, to).catch((error: Error) => setNotice(error.message))}/> : <div className="empty-sidebar"><FolderOpen size={24}/><span>{t("Your vault is empty.")}</span><button onClick={() => setModal({ kind: 'create', title: '' })}>{t("Create first note")}</button></div>}</div></> : leftTab === 'bookmarks' ? <div className="sidebar-content"><div className="sidebar-section-title">{t("BOOKMARKS")}</div>{bookmarks.filter((path) => treeFiles.some((note) => note.path === path)).map((path) => <button className="tree-file" key={path} onClick={() => void openNote(path)}><Bookmark size={14}/><span>{baseName(path)}</span></button>)}{!bookmarks.length && <p className="detail-empty">{t("Bookmark a note using the icon in the editor toolbar.")}</p>}</div> : <div className="sidebar-content search-pane"><div className="search-box"><Search size={15}/><input aria-label={t("Search notes")} className="search-input" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("Search notes\u2026")}/></div><div className="search-meta">{searchBusy ? 'Buscando…' : search ? t("{v0} matches", { v0: searchResults.reduce((sum, item) => sum + item.count, 0) }) : t("Search all files")}</div><div className="search-results">{searchResults.map((item) => <button className="search-result" key={item.path} onClick={() => void openNote(item.path)}><span className="search-result-title">{baseName(item.path)}<small>{item.count}</small></span><span className="search-result-path">{item.path}</span>{item.snippets.slice(0, 2).map((snippet, index) => <span className="search-result-snippet" key={index}>{snippet}</span>)}</button>)}</div></div>}
+        {leftTab === 'files' ? <><div className="explorer-toolbar"><VaultSwitcher vaults={vaults} currentId={vaultId} onSwitch={(id) => void openVault(id)} onManage={() => setModal({ kind: 'vaults' })}/><button className="mini-icon" aria-label={t("New folder")} title={t("New folder")} onClick={() => setModal({ kind: 'folder-create' })}><FolderPlus size={15}/></button><button className="mini-icon" aria-label={t("Import Markdown folder")} title={t("Import Markdown folder")} onClick={() => importInput.current?.click()}><FolderInput size={16}/></button><button className="mini-icon" onClick={() => setModal({ kind: 'create', title: '' })} aria-label={t("Create note")} title={t("Create note")}><FilePlus2 size={16}/></button></div><div className="sidebar-content">{treeFiles.length ? <FileTree notes={treeFiles} activePath={active?.path} onOpen={(path) => void openNote(path)} onAction={fileAction} onMove={(from, to) => void moveFile(from, to).catch((error: Error) => setNotice(error.message))}/> : <div className="empty-sidebar"><FolderOpen size={24}/><span>{t("Your vault is empty.")}</span><button onClick={() => setModal({ kind: 'create', title: '' })}>{t("Create first note")}</button></div>}</div></> : leftTab === 'bookmarks' ? <div className="sidebar-content"><div className="sidebar-section-title">{t("BOOKMARKS")}</div>{bookmarks.filter((path) => treeFiles.some((note) => note.path === path)).map((path) => <button className="tree-file" key={path} onClick={() => void openNote(path)}><Bookmark size={14}/><span>{baseName(path)}</span></button>)}{!bookmarks.length && <p className="detail-empty">{t("Bookmark a note using the icon in the editor toolbar.")}</p>}</div> : <div className="sidebar-content search-pane"><div className="search-box"><Search size={15}/><input aria-label={t("Search notes")} className="search-input" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("Search notes\u2026")}/></div><div className="search-meta">{searchBusy ? 'Buscando…' : search ? t("{v0} matches", { v0: searchResults.reduce((sum, item) => sum + item.count, 0) }) : t("Search all files")}</div><div className="search-results">{searchResults.map((item) => <button className="search-result" key={item.path} onClick={() => void openNote(item.path)}><span className="search-result-title">{baseName(item.path)}<small>{item.count}</small></span><span className="search-result-path">{item.path}</span>{item.snippets.slice(0, 2).map((snippet, index) => <span className="search-result-snippet" key={index}>{snippet}</span>)}</button>)}</div></div>}
         <div className="sidebar-bottom"><span>{notes.length}{" " + t("notes")}</span><button onClick={() => void refreshNotes().catch((error: Error) => setNotice(error.message))}>{t("Refresh files")}</button></div>
       </aside>}
       <div className={`pane-groups split-${splitDirection}`}><main className={`editor-workspace ${focusedGroup === 'primary' ? 'focused-pane' : ''}`} onPointerDownCapture={() => focusGroup('primary')}>
@@ -993,7 +1013,7 @@ function App() {
         </>}
       </div></aside>}
     </div>
-    <footer className="statusbar"><span>{notes.length}{" " + t("notes")}<span className="status-divider">·</span>{isGraph ? t("Graph") : active ? active.path : t("My vault")}</span><span>{active ? <>{backlinks.length}{" " + t("backlinks") + " "}<span className="status-divider">·</span>{words}{" " + t("words")}<span className="status-divider">·</span>{active.content.length}{" " + t("characters")}</> : `Markdown · ${BRAND.name}`}</span></footer>
+    <footer className="statusbar"><span>{notes.length}{" " + t("notes")}<span className="status-divider">·</span>{isGraph ? t("Graph") : active ? active.path : vaultLabel(vaults.find((vault) => vault.id === vaultId))}</span><span>{active ? <>{backlinks.length}{" " + t("backlinks") + " "}<span className="status-divider">·</span>{words}{" " + t("words")}<span className="status-divider">·</span>{active.content.length}{" " + t("characters")}</> : `Markdown · ${BRAND.name}`}</span></footer>
     {modal?.kind === 'merge' && <ComposerModal source={modal.note} files={treeFiles} load={docs.load} onClose={() => setModal(null)} onMerge={async (target, prepend) => {
                 const result = await api.merge(modal.note.path, target.path, modal.note.hash, target.hash, prepend);
                 docs.remove(modal.note.path);
@@ -1034,6 +1054,7 @@ function App() {
     {modal?.kind === 'templates' && <TemplatesModal files={treeFiles} folder={vaultSettings.templatesFolder} onClose={() => setModal(null)} onChoose={insertTemplate}/>}
     {modal?.kind === 'file-rename' && <TextActionModal title={modal.folder ? t("Rename or move folder") : t("Rename or move file")} initial={modal.path} label={t("New path")} help={t("References in notes and Canvas files will be updated.")} onClose={() => setModal(null)} onSubmit={async (path) => { await moveFile(modal.path, path); setModal(null); }}/>}
     {modal?.kind === 'file-delete' && <Modal onClose={() => setModal(null)}><h2>{t("Move to trash?")}</h2><p className="muted">{modal.path}{modal.folder ? " " + t("and its contents") : ''}</p><div className="modal-actions"><button className="quiet-button" onClick={() => setModal(null)}>{t("Cancel")}</button><button className="primary-button destructive" onClick={() => void trashFile(modal.path).catch((error: Error) => setNotice(error.message))}>{t("Move to trash")}</button></div></Modal>}
+    {modal?.kind === 'vaults' && <VaultManager vaults={vaults} currentId={vaultId} onSwitch={(id) => void openVault(id)} onCreate={createVault} onRename={renameVault} onClose={() => setModal(null)}/>}
     {modal?.kind === 'private-recovery' && <Suspense fallback={null}><RecoveryDialog volatileNotes={()=>docs.ref.current} onClose={()=>setModal(null)} onDiscard={finishLogout} onRecovered={()=>{void refreshNotes();}}/></Suspense>}
     {modal?.kind === 'base-create' && <TextActionModal title={t("New base")} initial={modal.initial || t("Untitled")} label={t("Base name")} help={t("Views of files and properties in YAML .base format.")} onClose={() => setModal(null)} onSubmit={async (name) => { const path = `${name.trim().replace(/\.base$/i, '')}.base`; await docs.create(path, 'views:\n  - type: table\n    name: Table\n    order:\n      - file.name\n      - note.tags\n'); await refreshNotes(); setModal(null); await openNote(path); }}/>}
     {modal?.kind === 'canvas-create' && <TextActionModal title={t("New Canvas")} initial={modal.initial || t("Untitled")} label={t("Canvas name")} help={t("Draw, diagram, and place your notes as cards.")} onClose={() => setModal(null)} onSubmit={async (name) => { const path = `${name.trim().replace(/\.(board|canvas)$/i, '')}.board`; const context = await api.boardContext(); await api.saveBoard({ path, board: createBoard(context), context }, true); await refreshNotes(); setModal(null); await openNote(path); }}/>}
@@ -1072,7 +1093,7 @@ function App() {
                 }
             }}>{t("Save as copy")}</button></div></Modal>}
     {(modal?.kind === 'commands' || modal?.kind === 'switcher') && <CommandPicker title={modal.kind === 'commands' ? t("Search commands\u2026") : t("Open a note\u2026")} choices={modal.kind === 'commands' ? commands : notes.map((note) => ({ id: note.path, label: baseName(note.path), detail: note.path, run: () => { void openNote(note.path); } }))} onClose={() => setModal(null)}/>}
-    {modal?.kind === 'settings' && <Modal onClose={() => setModal(null)}><div className="modal-heading"><h2>{t("Settings")}</h2><button className="icon-button" aria-label={t("Close settings")} onClick={() => setModal(null)}><X size={18}/></button></div><LanguageSelector /><button onClick={()=>setModal({kind:"private-recovery"})}>{t("Private recovery")}</button><label className="settings-row">{t("Appearance")}<select aria-label={t("Appearance")} value={theme} onChange={(event) => setTheme(event.target.value)}><option value="dark">{t("Dark")}</option><option value="light">{t("Light")}</option></select></label><label className="settings-row">{t("Comfortable reading width")}<input type="checkbox" checked={readableWidth} onChange={(event) => setReadableWidth(event.target.checked)}/></label><details className="settings-detail"><summary>{t("Files and daily notes")}</summary>{([['dailyFolder', t("Daily notes folder")], ['dailyFormat', t("Date format")], ['dailyTemplate', t("Daily note template")], ['templatesFolder', t("Templates folder")], ['attachmentFolder', t("Attachments folder")]] as const).map(([key, label]) => <label className="settings-field" key={key}>{label}<input aria-label={label} value={vaultSettings[key]} onChange={(event) => setVaultSettings((current) => ({ ...current, [key]: event.target.value }))} onBlur={() => { void api.setSettings(vaultSettings).then(() => setLocal(scopedKey('settings'), vaultSettings)).catch((error: Error) => setNotice(error.message)); }}/></label>)}</details><div className="settings-actions"><button className="quiet-button" onClick={() => { window.location.href = '/api/export'; }}>{t("Export vault ZIP")}</button><button className="quiet-button" onClick={() => zipInput.current?.click()}>{t("Import ZIP")}</button></div><p className="muted small">{t("Appearance is saved in this browser. Daily notes, templates, and attachments use vault settings. Drafts and previously opened documents are available offline on this device.")}</p></Modal>}
+    {modal?.kind === 'settings' && <Modal onClose={() => setModal(null)}><div className="modal-heading"><h2>{t("Settings")}</h2><button className="icon-button" aria-label={t("Close settings")} onClick={() => setModal(null)}><X size={18}/></button></div><LanguageSelector /><button onClick={()=>setModal({kind:"private-recovery"})}>{t("Private recovery")}</button><label className="settings-row">{t("Appearance")}<select aria-label={t("Appearance")} value={theme} onChange={(event) => setTheme(event.target.value)}><option value="dark">{t("Dark")}</option><option value="light">{t("Light")}</option></select></label><label className="settings-row">{t("Comfortable reading width")}<input type="checkbox" checked={readableWidth} onChange={(event) => setReadableWidth(event.target.checked)}/></label><details className="settings-detail"><summary>{t("Files and daily notes")}</summary>{([['dailyFolder', t("Daily notes folder")], ['dailyFormat', t("Date format")], ['dailyTemplate', t("Daily note template")], ['templatesFolder', t("Templates folder")], ['attachmentFolder', t("Attachments folder")]] as const).map(([key, label]) => <label className="settings-field" key={key}>{label}<input aria-label={label} value={vaultSettings[key]} onChange={(event) => setVaultSettings((current) => ({ ...current, [key]: event.target.value }))} onBlur={() => { void api.setSettings(vaultSettings).then(() => setLocal(scopedKey('settings'), vaultSettings)).catch((error: Error) => setNotice(error.message)); }}/></label>)}</details><div className="settings-actions"><button className="quiet-button" onClick={() => { window.location.href = exportUrl(); }}>{t("Export vault ZIP")}</button><button className="quiet-button" onClick={() => zipInput.current?.click()}>{t("Import ZIP")}</button></div><p className="muted small">{t("Appearance is saved in this browser. Daily notes, templates, and attachments use vault settings. Drafts and previously opened documents are available offline on this device.")}</p></Modal>}
     {notice && <div className="toast" role="status"><span>{translateMessage(notice)}</span><button onClick={() => setNotice('')} aria-label={t("Dismiss notice")}><X size={15}/></button></div>}
   </div>;
 }

@@ -2,9 +2,23 @@ import { currentContext } from './workspace';
 import type { BoardDocument, ReferenceContext, BoardAsset } from '../shared/board-schema.mjs';
 import { t, translateMessage, getLocale } from './i18n';
 import type { NoteDocument, NoteSummary, SearchItem, Version, TrashEntry } from './types';
+/** The vault this browser opens, like Obsidian's last opened vault. Empty means the server's default vault. */
+export const VAULT_KEY = 'notesprig.vault';
+export function selectedVault(): string { try { return localStorage.getItem(VAULT_KEY) || ''; } catch { return ''; } }
+export function selectVault(id: string) { try { if (id) localStorage.setItem(VAULT_KEY, id); else localStorage.removeItem(VAULT_KEY); } catch { /* Storage can be unavailable; the default vault opens. */ } }
+export type VaultEntry = { id: string; name: string; default: boolean };
+async function vaultContext(): Promise<ReferenceContext> {
+    const id = selectedVault();
+    try { return await request<ReferenceContext>(`/api/boards/context${id ? `?vault=${encodeURIComponent(id)}` : ''}`); }
+    catch (error) {
+        // A vault removed on the server falls back to the default vault instead of locking the app.
+        if (id && (error as { data?: { code?: string } }).data?.code === 'VAULT_NOT_FOUND') { selectVault(''); return request<ReferenceContext>('/api/boards/context'); }
+        throw error;
+    }
+}
 export async function request<T>(url: string, init?: RequestInit): Promise<T> {
     let workspaceHeaders:Record<string,string>={};
-    if(!/^\/api\/(?:session|login|logout|boards\/context)$/.test(url)) {try {workspaceHeaders={'X-NoteSprig-Context':JSON.stringify(currentContext())};} catch { /* Bootstrap endpoints establish identity before private app calls. */ }}
+    if(!/^\/api\/(?:session|login|logout|boards\/context|vaults)(?:\?.*)?$/.test(url)) {try {workspaceHeaders={'X-NoteSprig-Context':JSON.stringify(currentContext())};} catch { /* Bootstrap endpoints establish identity before private app calls. */ }}
     const response = await fetch(url, {
         credentials: 'same-origin',
         signal: init?.signal || AbortSignal.timeout(30000),
@@ -27,7 +41,10 @@ export async function request<T>(url: string, init?: RequestInit): Promise<T> {
     return data as T;
 }
 export const api = {
-    boardContext: () => request<ReferenceContext>('/api/boards/context'),
+    boardContext: vaultContext,
+    vaults: () => request<VaultEntry[]>('/api/vaults'),
+    createVault: (name: string) => request<VaultEntry>('/api/vaults', { method: 'POST', body: JSON.stringify({ name }) }),
+    renameVault: (id: string, name: string) => request<VaultEntry>('/api/vaults', { method: 'PUT', body: JSON.stringify({ id, name }) }),
     board: (path: string, context: ReferenceContext) => request<{path:string;board:BoardDocument;hash:string}>(`/api/boards?path=${encodeURIComponent(path)}&context=${encodeURIComponent(JSON.stringify(context))}`),
     saveBoard: (payload: {path:string;board:BoardDocument;baseHash?:string;context:ReferenceContext}, create = false, signal?:AbortSignal) => request<{path:string;board:BoardDocument;hash:string}>('/api/boards', {method:create?'POST':'PUT',body:JSON.stringify(payload),signal}),
     boardPreview: (path:string, context:ReferenceContext, fragment?:string, signal?:AbortSignal) => request<{title:string;excerpt:string;status:'ready';revision:string}>('/api/boards/preview',{method:'POST',body:JSON.stringify({path,context,fragment}),signal}),

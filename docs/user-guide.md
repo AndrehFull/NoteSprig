@@ -20,6 +20,12 @@ Some shortcuts are reserved by the browser or operating system. The command pale
 
 Tabs can be pinned, reordered, and split into two pane groups. Layout, bookmarks, and appearance preferences belong to the browser you are using. Daily-note, template, and attachment settings are saved in `.notesprig/settings.json` in the vault.
 
+## Vaults
+
+A vault is a separate folder of notes with its own links, graph, search, history, trash, settings, and Canvas references. Click the vault name at the top of the file explorer to switch vaults or choose **Manage vaults…** (also in the command palette) to create, rename, or open one. Creating a vault opens it immediately.
+
+Switching saves pending edits first and opens the vault in a clean workspace; tabs, bookmarks, and offline drafts are remembered separately for each vault. Links never cross vaults. This browser remembers the last vault you opened. Vaults are not deleted from the app; remove a vault's folder on the server while the app is stopped.
+
 ## Link notes across folders
 
 Use wikilinks or relative Markdown links:

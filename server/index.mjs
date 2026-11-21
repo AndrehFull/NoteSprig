@@ -4,8 +4,7 @@ import { createServer } from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createAuth } from './auth.mjs';
-import { Vault } from './vault.mjs';
-import { Boards } from './boards.mjs';
+import { VaultRegistry } from './vaults.mjs';
 import { environment, legacy } from './legacy.mjs';
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const branding = JSON.parse(readFileSync(path.join(projectRoot, 'branding.json'), 'utf8'));
@@ -14,6 +13,8 @@ const port = Number(process.env.PORT || 4317);
 const production = process.env.NODE_ENV === 'production';
 const trustProxy = process.env.TRUST_PROXY === '1';
 const vaultDir = path.resolve(environment('VAULT') || path.join(projectRoot, 'data', 'vault'));
+// Additional vaults live beside the default vault (in Docker: /data/vaults), inside the same persistent volume.
+const vaultsDir = path.resolve(environment('VAULTS_DIR') || path.join(path.dirname(vaultDir), 'vaults'));
 const distDir = path.join(projectRoot, 'dist');
 const auth = createAuth({
     passwordHash: environment('PASSWORD_HASH'),
@@ -21,15 +22,14 @@ const auth = createAuth({
     devPassword: environment('DEV_PASSWORD'),
     production,
 });
-const vault = new Vault(vaultDir);
+const registry = new VaultRegistry(vaultDir, vaultsDir);
 const attempts = new Map();
 if (production && !['127.0.0.1', '::1', 'localhost'].includes(host) && !trustProxy) {
     throw new Error("In production, set TRUST_PROXY=1 only behind a trusted proxy.");
 }
 if (!Number.isInteger(port) || port < 1 || port > 65535)
     throw new Error("Invalid PORT.");
-await vault.initialize();
-const boards = new Boards(vault);
+await registry.initialize();
 const mimeTypes = {
     '.css': 'text/css; charset=utf-8', '.html': 'text/html; charset=utf-8', '.ico': 'image/x-icon',
     '.js': 'text/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8',
@@ -177,7 +177,7 @@ async function serveStatic(req, res, url) {
     });
     createReadStream(absolute).pipe(res);
 }
-async function privateRoutes(req,res,url) {
+async function privateRoutes(req,res,url,{vault,boards}) {
             if (req.method === 'GET' && url.pathname === '/api/boards/context')
                 return json(res, 200, await boards.context());
             if (url.pathname === '/api/boards' && req.method === 'GET')
@@ -352,8 +352,21 @@ const server = createServer(async (req, res) => {
             }
             if (!authenticated(req))
                 return json(res, 401, { error: "Authentication required." });
+            if (url.pathname === '/api/vaults' && req.method === 'GET')
+                return json(res, 200, registry.list());
+            if (url.pathname === '/api/vaults' && req.method === 'POST')
+                return json(res, 201, await registry.create((await readJson(req, 16 * 1024)).name));
+            if (url.pathname === '/api/vaults' && req.method === 'PUT') {
+                const body = await readJson(req, 16 * 1024);
+                return json(res, 200, await registry.rename(body.id, body.name));
+            }
+            // Route to the vault named by the verified workspace identity the client already sends:
+            // the request header, a URL context (attachments, downloads, export), or ?vault= while bootstrapping.
             const capturedContext=req.headers['x-notesprig-context'];
-            return capturedContext ? await vault.boardReferences.readGuarded(JSON.parse(capturedContext), () => privateRoutes(req,res,url), {referenceEpoch:false}) : await privateRoutes(req,res,url);
+            const parsedContext=capturedContext ? JSON.parse(capturedContext) : null;
+            const urlContext=url.searchParams.get('context');
+            const target=registry.get(parsedContext?.vaultId ?? (urlContext ? JSON.parse(urlContext)?.vaultId : undefined) ?? url.searchParams.get('vault'));
+            return parsedContext ? await target.vault.boardReferences.readGuarded(parsedContext, () => privateRoutes(req,res,url,target), {referenceEpoch:false}) : await privateRoutes(req,res,url,target);
         }
         if (req.method !== 'GET' && req.method !== 'HEAD')
             return json(res, 405, { error: "Method not allowed." });
@@ -366,7 +379,7 @@ const server = createServer(async (req, res) => {
 });
 server.listen(port, host, () => {
     console.log(`${branding.name} available at http://${host}:${port}`);
-    console.log(`Vault: ${vaultDir}`);
+    console.log(`Vaults: ${registry.list().map((entry) => entry.name).join(', ')} (default ${vaultDir}; others in ${vaultsDir})`);
     if (!production)
         console.log("Local development: password from NOTESPRIG_DEV_PASSWORD (default dev-only-change-me).");
 });

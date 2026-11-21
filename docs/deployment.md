@@ -43,6 +43,7 @@ The image runs as UID 1000 with a read-only root filesystem, dropped capabilitie
 | `NOTESPRIG_PASSWORD_HASH` | Production scrypt password hash |
 | `SESSION_SECRET` | Random production session secret, at least 32 characters |
 | `TRUST_PROXY` | Set to `1` only behind a trusted proxy; configured in Compose |
+| `NOTESPRIG_VAULTS_DIR` | Folder for additional vaults; defaults to `vaults` beside the default vault (`/data/vaults` in Docker) |
 | `NOTESPRIG_BACKUP_PASSWORD` | Backup tool password for unattended execution |
 
 Compose reads `.env`. Direct Node commands use environment variables exported by your shell. Keep `.env` and production credentials out of version control.
@@ -107,6 +108,8 @@ sudo systemctl enable --now notesprig-backup.timer
 
 The timer runs daily at 03:15 in `America/Sao_Paulo`, with a short randomized delay. Change the timer for a different schedule. The service uses `ProtectHome=true`; keep rclone configuration under `/etc/notesprig/` with permission 600 and set `RCLONE_CONFIG` when needed.
 
+The wrapper backs up the default vault (`data/vault`) and every additional vault in `data/vaults/` in the same pause, one archive per vault (`notesprig-vault-<folder>-<time>.obak`), and uploads each archive when a remote is configured.
+
 Keep a copy off the VPS and periodically test restoration. Set retention according to available storage; the wrapper does not delete old archives.
 
 ## Restore and verify
@@ -120,6 +123,8 @@ node scripts/backup.mjs restore --input backups/first.obak --vault /opt/notespri
 Restoration verifies authentication before extraction, rejects unsafe paths and links, and refuses an occupied destination. An incorrect password leaves the destination unchanged.
 
 Inspect the restored notes, attachments, and hidden metadata. To switch to that copy, stop the app, update its bind mount, and assign UID 1000 ownership. Keep the previous directory until you have verified access through the browser.
+
+An additional vault restores the same way. Stop the app, restore the archive to a new folder under `data/vaults/`, assign UID 1000 ownership, and start the app; the vault keeps its name. Do not run a restored copy beside its original: two folders with the same vault identity are refused at startup.
 
 ## Updates
 
