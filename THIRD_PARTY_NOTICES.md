@@ -252,7 +252,7 @@ The distributed npm components are not patched by NoteSprig; bundling and minifi
 | `lodash.throttle` | 4.1.1 | MIT |
 | `lucide-react` | 1.77.0 | ISC |
 | `marked` | 16.4.2 | MIT |
-| `marked` | 17.0.6 | MIT |
+| `marked` | 18.2.1 | MIT |
 | `mermaid` | 11.17.2 | MIT |
 | `mermaid` | 12.3.0 | MIT |
 | `multimath` | 2.0.0 | MIT |

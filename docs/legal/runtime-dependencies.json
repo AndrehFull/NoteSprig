@@ -2324,12 +2324,12 @@
   },
   {
     "name": "marked",
-    "version": "17.0.6",
+    "version": "18.2.1",
     "license": "MIT",
-    "repository": "git://github.com/markedjs/marked.git",
-    "archive": "https://registry.npmjs.org/marked/-/marked-17.0.6.tgz",
+    "repository": "git+https://github.com/markedjs/marked.git",
+    "archive": "https://registry.npmjs.org/marked/-/marked-18.2.1.tgz",
     "noticeFiles": [
-      "LICENSE.md"
+      "LICENSE"
     ]
   },
   {
